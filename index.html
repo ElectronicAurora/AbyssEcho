@@ -113,6 +113,14 @@ body.choosing .abtn{opacity:.34;cursor:not-allowed;pointer-events:none;transform
 body.choosing .abtn:hover{background:rgba(255,255,255,.05);border-color:var(--line);transform:none}
 #choice{margin-top:11px;display:none}
 #choice.on{display:block;animation:fade .2s}
+/* ★ 召唤物地图操控条 */
+#sumCtl{margin-top:11px;display:none;border:1px solid rgba(167,139,250,.45);
+  background:linear-gradient(180deg,rgba(139,92,246,.14),rgba(139,92,246,.05));
+  border-radius:11px;padding:10px 11px}
+#sumCtl.on{display:block;animation:fade .2s}
+#sumCtl .ctitle{color:#c4b5fd;text-transform:none;letter-spacing:0;font-size:12px}
+#sumCtl .opt{border-color:rgba(167,139,250,.4)}
+#sumCtl .opt:hover{background:rgba(167,139,250,.18);border-color:rgba(167,139,250,.8)}
 @keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 .ctitle{font-size:11.5px;color:var(--dim);letter-spacing:.1em;margin-bottom:7px;text-transform:uppercase}
 .opts{display:flex;flex-wrap:wrap;gap:7px}
@@ -305,6 +313,10 @@ input[type=number],input[type=text]{
           <button class="abtn" data-a="shop">商店<small>刻印 13b · 交易不限次数</small></button>
           <button class="abtn" data-a="pass">结束回合<small>放弃剩余行动点</small></button>
         </div>
+        <div id="sumCtl">
+          <div class="ctitle" id="scTitle"></div>
+          <div class="opts" id="scOpts"></div>
+        </div>
         <div id="choice">
           <div class="ctitle" id="cTitle"></div>
           <div class="opts" id="cOpts"></div>
@@ -408,7 +420,7 @@ input[type=number],input[type=text]{
           <tr><td class="no">⑦</td><td class="nm">蹑景</td><td>声明后追加 <b>N 个额外回合</b>（可叠加 · 冷却 2 轮）</td></tr>
           <tr><td class="no">⑧</td><td class="nm">凌波</td><td><b>可重复选</b>，⑧a +30% 闪避 / 蓄闪；⑧b 闪避成功送额外回合</td></tr>
           <tr><td class="no">⑨</td><td class="nm">裂帛</td><td>所有进攻类能力额外施加 1 层【撕裂】</td></tr>
-          <tr><td class="no">⑩</td><td class="nm">御灵</td><td>自身召唤物 HP/ATK +50%、可手动操控</td></tr>
+          <tr><td class="no">⑩</td><td class="nm">御灵</td><td>自身召唤物 HP/ATK +50%、可手动操控（点地图移动/攻击）、并共享你的刻印</td></tr>
           <tr><td class="no">⑪</td><td class="nm">点染</td><td>攻击命中可自选附加【红】/【蓝】/【黄】</td></tr>
           <tr><td class="no">⑫</td><td class="nm">尘梦</td><td>回合开始时未受伤 +1 层【尘】（每层减伤 1）</td></tr>
           <tr><td class="no">⑬</td><td class="nm">盈箧</td><td>背包内护甲 DEF 可叠加、武器 ATK 可叠加</td></tr>
@@ -442,6 +454,7 @@ input[type=number],input[type=text]{
         <details class="faq"><summary>为什么我走不了？</summary><p>检查是否：① 行动点用完了（每回合 2 点）；② 被戒律「禁止移动」；③ 中了【黄】（喝药水解）；④ 被 ⑨b 撕裂把 DEF 压到负数（等一回合 / 用【灰】解）。</p></details>
         <details class="faq"><summary>怎么换房？</summary><p>走到房间边缘的<b>门格</b>（绿色方框），再点「移动」，会出现「进入 XX 房」选项。</p></details>
         <details class="faq"><summary>能不能攻击隔壁房间的怪？</summary><p>不能。所有攻击必须同房间。</p></details>
+        <details class="faq"><summary>怎么手动操控召唤物？</summary><p>需要 ⑩<b>御灵</b>。拿到后，轮到你自己的召唤物行动时会进入<b>地图操控模式</b>：地图上会亮起<b>紫色格</b>（本回合可达，最多 2 格）和<b>红框敌人</b>（射程内可打），<b>直接点格子移动、点敌人攻击</b>。操控条上还有<b>待机 / 自动行动 / ⚡蹑景</b>（额外回合）与<b>命中效果</b>（⑪ 点染的颜色，随你当前的 ⑪/11b 变化）；点「列表操作」可切回按钮列表，小屏更顺手。<br>没有 ⑩ 御灵时，无论人类还是 AI，召唤物都<b>只能自动索敌</b>，不会进入操控模式。</p></details>
         <details class="faq"><summary>可以打队友吗？</summary><p>可以，攻击列表里队友会标注「（队友）」。这不算叛变——用来帮队友解掉【蓝】（下次受击前无法攻击）或【白】，但伤害是真的，请注意别打死人。</p></details>
         <details class="faq"><summary>宝物怎么拿？</summary><p>走到宝箱<b>相邻格</b>，点「开箱」。</p></details>
       </div>
@@ -476,7 +489,7 @@ const ITEMS = {
   bow:      {name:'弓箭',   icon:'\u{1F3F9}', type:'weapon', atk:8,  rng:Infinity, ranged:true, noMelee:true, charge:true, ench:true, desc:'无近战。蓄力 1 回合后释放：射程无限、ATK +8'},
   trident:  {name:'三叉戟', icon:'\u{1F531}', type:'weapon', atk:9,  rng:Infinity, ranged:true, throwable:true, charge:true, ench:true, desc:'近战 ATK+9（无需蓄力）；投掷需蓄力 1 回合，射程∞，投出后需到落点由本人捡回'},
   seal:     {name:'刻印',   icon:'\u{1F4DC}', type:'consume', desc:'获得时立即自选一项永久强化：13 选 1，不占回合（不入背包、死亡不掉落）'},
-  summon:   {name:'召唤物', icon:'\u{1F47B}', type:'consume', desc:'使用后自选一种生物召唤（巨兽 / 游侠 / 幽灵）· 召唤当回合不行动，下个自己的回合起行动'},
+  summon:   {name:'召唤物', icon:'\u{1F47B}', type:'consume', desc:'使用后自选一种生物召唤（巨兽 / 游侠 / 幽灵）· 召唤当回合不行动，下个自己的回合起行动 · 有 ⑩ 御灵时轮到你操控'},
   yq_cangming: {name:'沧溟', icon:'\u{1F30A}', type:'weapon', atk:9, rng:Infinity, ranged:true, charge:true, ench:true, yiqi:1,
     desc:'遗器 · 近战 ATK+9（无需蓄力）/ 蓄力投掷射程∞ · 可附魔。主动技「分配」：把 ATK 点分给近战射程内实体——回复 HP / 加护盾 / 吸收 HP（真实伤害：无视 DEF 与护盾，受【尘】减伤）；该伤害不走命中环节，不可被闪避。被动：每回合开始自动释放一次'},
   yq_qixian:  {name:'七弦', icon:'\u{1F3B5}', type:'weapon', atk:0, noAtk:true, ench:true, yiqi:2,
@@ -1036,7 +1049,7 @@ const SEALS = [
   {id:'7',  name:'蹑景', icon:'\u{26A1}',    desc:'回合开始主动使用：主要行动后追加 N 个额外回合（可叠加：N = 刻印层数；冷却 2 轮）'},
   {id:'8',  name:'凌波', icon:'\u{1F4A8}', desc:'可重复选。分支① +30% 闪避，并可花 1 个主要行动【蓄闪】；分支② 闪避成功立即获 N 个额外回合'},
   {id:'9',  name:'裂帛', icon:'\u{1FA79}', desc:'所有进攻类能力额外施加 1 层【撕裂】'},
-  {id:'10', name:'御灵', icon:'\u{1F451}', desc:'自身召唤物 HP/ATK +50%，可操控其行动，且召唤物共享你的刻印'},
+  {id:'10', name:'御灵', icon:'\u{1F451}', desc:'自身召唤物 HP/ATK +50%，可操控其行动（点地图上的紫色格移动、点红框敌人攻击），且召唤物共享你的刻印'},
   {id:'11', name:'点染', icon:'\u{1F9EA}', desc:'攻击命中可自选附加【红】/【蓝】/【黄】之一；选 11b 分支后解锁【白】/【黑】/【灰】与主动技'},
   {id:'12', name:'尘梦', icon:'\u{1F32B}', desc:'回合开始时若未受伤则 +1 层【尘】（每层减伤 1，含真实伤害），受伤即清空'},
   {id:'13', name:'盈箧', icon:'\u{1F392}', desc:'背包内护甲 DEF 可叠加、武器 ATK 可叠加；已拥有后再选可解锁分支「商店」'},
@@ -1395,6 +1408,7 @@ function removeUid(p, uid){ const i = p.bag.findIndex(it => uidEq(it.uid, uid));
 function newGame(cfg){
   const mode = cfg.mode || 'solo';
   ITEM_UID = 1; MONSTER_UID = 1;
+  if (typeof exitSummonCtrl === 'function') exitSummonCtrl();  // 清掉上一局残留的召唤物操控条
   G = {
     mode: mode,
     n: cfg.n,
@@ -4054,7 +4068,8 @@ function summonRngOf(s){
   const T = SUMMON_TYPES[s.type];
   const o = s.isSummon ? G.players[s.owner] : null;
   if (o && hasSeal(o, '10') && hasSeal(o, '6b')) return Infinity;
-  return T.rng;
+  // ★ rng 0 表示「近战」＝相邻 1 格；entDist 里相邻就是 1，所以至少给 1，否则近战召唤物永远打不到人
+  return T.rng === 0 ? 1 : T.rng;
 }
 function summonCanStep(s, from, to){
   if (from === to) return false;
@@ -4143,6 +4158,12 @@ function runOneSummon(s, owner, done){
   const pend = s.extraPending || 0; s.extraPending = 0;
   const runMain = () => {
     if (!s.alive){ done(); return; }
+    // ★ 刻印 ⑩ 御灵：人类玩家手动操控（AI 与无御灵者一律自动索敌）
+    if (!owner.isAI && owner.alive && hasSeal(owner, '10')){
+      s.useSeal7 = false;
+      summonPanel(s, owner, done);
+      return;
+    }
     let useSeal7 = false;
     if (canSummonUseSeal7(s, owner) && aiSummonWantsSeal7(s, owner)){
       useSeal7 = true; s.seal7cd = owner.turnSeq;
@@ -4157,6 +4178,155 @@ function runOneSummon(s, owner, done){
     const l = () => { if (c-- <= 0 || !s.alive){ runMain(); return; } summonDoAction(s, owner, l); };
     l();
   } else runMain();
+}
+/* ============================================================
+   ★ 召唤物手动操控（刻印 ⑩ 御灵）
+   ============================================================ */
+function summonPanel(s, owner, done, forceList){
+  const T = SUMMON_TYPES[s.type];
+  // 休息硬直：这一回合本来就不能动，别给出能动的选项，直接结算掉
+  if (s.resting){
+    exitSummonCtrl();
+    showChoice('召唤物行动 · ' + s.name + '（HP ' + Math.max(0, s.hp) + '/' + s.maxHp + ' · 休息中）',
+      [{ label:'确认（本回合休息）', sub:'上一击命中后进入硬直，这一回合无法行动',
+         run: () => { consumeResting(s); done(); } }],
+      () => { consumeResting(s); done(); });
+    return;
+  }
+  if (hasBan(s, 'atk') && hasBan(s, 'move')){
+    exitSummonCtrl();
+    addLog(entLabel(s) + ' 被戒律完全限制，无法行动。', 'sys');
+    done();
+    return;
+  }
+  // ★ 默认进入「点地图」操控模式；forceList 时退回按钮列表
+  if (!forceList && summonCtrlEnabled(s, owner)){ enterSummonCtrl(s, owner, done); return; }
+  exitSummonCtrl();
+
+  const fxName = HITFX[s.hitEffect || 'red'].name;
+  const title = '召唤物行动 · ' + s.name + '（HP ' + Math.max(0, s.hp) + '/' + s.maxHp +
+                ' · ATK ' + summonAtk(s) + ' · 射程 ' + rngTxt(summonRngOf(s)) + '）';
+  const opts = [];
+  opts.push({ label:'自动行动', sub:'按索敌逻辑执行（推荐）',
+    run: () => { summonHumanGo(s, owner, null, done); } });
+
+  const rng = summonRngOf(s);
+  foesOfEnt(s).filter(t => t.alive && t.room === s.room && entDist(s, t) <= rng).forEach(t => opts.push({
+    label:'攻击 ' + entLabel(t),
+    sub: hpDisp(t) + ' · DEF ' + getDef(t) + dustHint(t) +
+         ' · 预计伤害 ' + estHit(Math.max(0, summonAtk(s) - getDef(t)), t, s),
+    run: () => { summonHumanGo(s, owner, {act:'atk', target:t}, done); }
+  }));
+
+  if (!moveLocked(s)){
+    reachableTiles(s, 2).forEach(t => opts.push({
+      label:'移动到 (' + t.x + ',' + t.y + ')',
+      sub:'本回合可走（最多 2 格）',
+      run: () => { summonHumanGo(s, owner, {act:'move', pos:t}, done); }
+    }));
+  } else {
+    opts.push({ label:'无法移动', sub: moveLockReason(s),
+      run: () => { summonHumanGo(s, owner, {act:'idle'}, done); } });
+  }
+
+  opts.push({ label:'待机', sub:'本回合不行动',
+    run: () => { summonHumanGo(s, owner, {act:'idle'}, done); } });
+
+  if (canSummonUseSeal7(s, owner)){
+    opts.push({ label:'⚡ 蹑景' + (s.useSeal7 ? '（已选 ✓）' : ''),
+      sub:'本回合行动后再行动 ' + summonSeal7Extra(owner) + ' 次',
+      run: () => { s.useSeal7 = !s.useSeal7; summonPanel(s, owner, done); } });
+  }
+  if (entHasSeal(s, '11')){
+    opts.push({ label:'命中效果：' + fxName + '（点击更换）',
+      sub: HITFX[s.hitEffect || 'red'].desc +
+           (s.hitEffect === 'grey' ? ' · 命中时解：' + greyTargetHint(s) : ''),
+      run: () => pickSummonHitEffect(s, owner, done) });
+  }
+  showChoice(title, opts, () => summonHumanGo(s, owner, {act:'idle'}, done)); // 取消 = 待机，流程照常推进
+}
+const GREY_KEY_NAME = {black:'【黑】', white:'【白】', blue:'【蓝】', yellow:'【黄】', tear:'【撕裂】'};
+function greyTargetHint(s){
+  return s.hitGreyKey ? ('优先解除 ' + (GREY_KEY_NAME[s.hitGreyKey] || s.hitGreyKey))
+                      : '自动挑最有利的一项';
+}
+function pickSummonHitEffect(s, owner, done){
+  const cols = paintColorsOf(owner);
+  showChoice('【' + s.name + '】命中后附加哪种效果？（' + (cols.length > 3 ? '六' : '三') + '选一）',
+    cols.map(k => ({
+      label: '【' + HITFX[k].name + '】',
+      sub: HITFX[k].desc,
+      run: () => {
+        if (k === 'grey'){ pickSummonGreyKey(s, owner, done); return; }
+        s.hitEffect = k; s.hitGreyKey = null;
+        summonPanel(s, owner, done);      // 选完回到行动面板，不消耗行动
+      }
+    })), () => summonPanel(s, owner, done));
+}
+function pickSummonGreyKey(s, owner, done){
+  const keys = [
+    {k:null,      label:'自动挑（推荐）', sub:'命中时按「黑 > 白 > 蓝 > 黄 > 撕裂 > 尘 > 戒律 > 蓄闪」解最有利的一项'},
+    {k:'black',   label:'优先解【黑】',   sub:'目标身上有【黑】就解它，否则自动降级'},
+    {k:'white',   label:'优先解【白】',   sub:'目标身上有【白】就解它，否则自动降级'},
+    {k:'blue',    label:'优先解【蓝】',   sub:'目标身上有【蓝】就解它，否则自动降级'},
+    {k:'yellow',  label:'优先解【黄】',   sub:'目标身上有【黄】就解它，否则自动降级'},
+    {k:'tear',    label:'优先解【撕裂】', sub:'目标身上有【撕裂】就解它，否则自动降级'},
+  ];
+  showChoice('【灰】命中时优先解除哪一类效果？', keys.map(o => ({
+    label: o.label, sub: o.sub,
+    run: () => { s.hitEffect = 'grey'; s.hitGreyKey = o.k; summonPanel(s, owner, done); }
+  })), () => pickSummonHitEffect(s, owner, done));
+}
+function summonHumanGo(s, owner, choice, done){
+  done = done || function(){};
+  exitSummonCtrl();   // 一旦出手/待机，操控条立刻收起，避免地图点选残留
+  const finish = () => {
+    // 4b 敕罚：人类操控路径同样结算（自动路径已在 summonDoAction 里结过，这里只会结新挂上的）
+    if (s.alive && s.actedBans && s.actedBans.length){ settleSanctions(s); s.actedBans = []; }
+    // 蹑景额外回合：同样过面板，否则人类玩家在这一步会被强制自动索敌
+    if (s.useSeal7 && s.alive && canSummonUseSeal7(s, owner)){
+      s.seal7cd = owner.turnSeq; s.useSeal7 = false;
+      const n = summonSeal7Extra(owner);
+      addLog(entLabel(s) + ' 使用蹑景，获得 ' + n + ' 个额外回合！', 'hl');
+      let left = n;
+      const step = () => {
+        if (left-- <= 0 || !s.alive){ done(); return; }
+        if (!owner.isAI && owner.alive && hasSeal(owner, '10')){ summonPanel(s, owner, step); return; }
+        summonDoAction(s, owner, step);
+      };
+      step();
+      return;
+    }
+    done();
+  };
+
+  if (consumeResting(s)){ done(); return; }
+  if (!choice){ summonDoAction(s, owner, finish); return; }   // 「自动行动」＝走常规索敌
+
+  if (choice.act === 'idle'){
+    addLog(entLabel(s) + ' 原地待命。');
+  } else if (choice.act === 'move'){
+    if (moveLocked(s)){
+      addLog(entLabel(s) + ' 当前无法移动（' + moveLockReason(s) + '）。', 'sys');
+    } else {
+      markActed(s, 'move');
+      s.pos = { x: choice.pos.x, y: choice.pos.y };
+      s.movedThisTurn = true;
+      addLog(entLabel(s) + ' 移动到 (' + s.pos.x + ',' + s.pos.y + ')。');
+    }
+  } else if (choice.act === 'atk'){
+    if (s.st.blue){
+      addLog(entLabel(s) + ' 处于【蓝】，无法攻击。', 'sys');
+    } else {
+      const isPuppet = s.type === 10;
+      addLog(entLabel(s) + ' 攻击 ' + entLabel(choice.target));
+      markActed(s, 'atk');
+      attackResolve(s, choice.target, {trueDmg: isPuppet,
+        effect: entHasSeal(s, '11') ? summonHitEffect(s) : null,
+        blackSeal: s.hitSeal || null, greyKey: s.hitGreyKey || null});
+    }
+  }
+  finish();
 }
 function summonHitEffect(s){
   const cols = paintColorsOf(s);
@@ -5702,6 +5872,8 @@ function drawMap(){ /* 旧版地图，已废弃 */ }
    ============================================================ */
 function render(){
   if (!G) return;
+  // 召唤物操控条自愈：一旦不在召唤物阶段（异常中断等），立刻收起
+  if (G.sumCtl && G.sub !== 'summon' && G.sub !== 'summonExtra') exitSummonCtrl();
   const p = cur();
   $('rRound').textContent = G.dungeon ? G.dungeon.floor : 1;
   $('rPlayers').textContent = G.players.filter(q=>q.alive).length;
@@ -5856,26 +6028,158 @@ function render(){
 }
 
 /* ============================================================
+   ★ 召唤物地图操控（刻印 ⑩ 御灵 · 点击地图版）
+   ============================================================ */
+function tileAtEvent(e){
+  if (!G || !G.dungeon) return null;
+  const rect = cv.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (MW / rect.width);
+  const my = (e.clientY - rect.top) * (MH / rect.height);
+  const room = G.dungeon.rooms[G.dungeon.currentRoom];
+  if (!room) return null;
+  const pw = room.w * TILE_PX, ph = room.h * TILE_PX;
+  const ox = (MW - pw) / 2, oy = (MH - ph) / 2 + 20;
+  const tx = Math.floor((mx - ox) / TILE_PX);
+  const ty = Math.floor((my - oy) / TILE_PX);
+  if (tx < 0 || ty < 0 || tx >= room.w || ty >= room.h) return null;
+  return { room, tx, ty };
+}
+function summonCtrlEnabled(s, owner){
+  return !!(s && s.alive && owner && owner.alive && !owner.isAI &&
+            hasSeal(owner, '10') && G && G.phase === 'play' && G.dungeon);
+}
+function enterSummonCtrl(s, owner, done){
+  if (!summonCtrlEnabled(s, owner)){ done && done(); return; }
+  G.sumCtl = { s: s, owner: owner, done: (typeof done === 'function') ? done : function(){} };
+  const bar = $('sumCtl');
+  if (bar) bar.classList.add('on');
+  renderSumCtlBar();
+  render();
+}
+function exitSummonCtrl(){
+  if (G) G.sumCtl = null;
+  const bar = $('sumCtl');
+  if (bar) bar.classList.remove('on');
+}
+function renderSumCtlBar(){
+  const box = $('scOpts');
+  if (!box) return;
+  const st = G.sumCtl;
+  if (!st){ box.innerHTML = ''; return; }
+  const s = st.s, owner = st.owner, done = st.done;
+  $('scTitle').innerHTML =
+    '召唤物行动 · <b style="color:#c4b5fd">' + s.name + '</b>' +
+    '（HP ' + Math.max(0, s.hp) + '/' + s.maxHp + ' · ATK ' + summonAtk(s) +
+    ' · 射程 ' + rngTxt(summonRngOf(s)) + '）' +
+    '<span style="color:#8b93b0"> — 点地图上的</span>' +
+    '<b style="color:#a78bfa">紫色格</b><span style="color:#8b93b0">移动，点</span>' +
+    '<b style="color:#ff3d9a">红框敌人</b><span style="color:#8b93b0">攻击</span>';
+  box.innerHTML = '';
+  const add = (label, sub, fn) => {
+    const b = document.createElement('button');
+    b.className = 'opt';
+    b.innerHTML = label + (sub ? '<span class="sub">' + sub + '</span>' : '');
+    b.onclick = () => { fn(); };
+    box.appendChild(b);
+  };
+  if (moveLocked(s)){
+    add('无法移动', moveLockReason(s), () => {});
+    box.lastChild.disabled = true;
+  }
+  add('待机 / 结束', '本回合不行动，回合继续推进', () => {
+    exitSummonCtrl(); summonHumanGo(s, owner, {act:'idle'}, done);
+  });
+  add('自动行动', '交给索敌 AI（同没有御灵时）', () => {
+    exitSummonCtrl(); summonHumanGo(s, owner, null, done);
+  });
+  if (canSummonUseSeal7(s, owner)){
+    add('⚡ 蹑景' + (s.useSeal7 ? '（已选 ✓）' : ''),
+        '本回合行动后再行动 ' + summonSeal7Extra(owner) + ' 次',
+        () => { s.useSeal7 = !s.useSeal7; renderSumCtlBar(); });
+  }
+  if (entHasSeal(s, '11')){
+    add('命中效果：' + HITFX[s.hitEffect || 'red'].name + '（点击更换）',
+        HITFX[s.hitEffect || 'red'].desc +
+        (s.hitEffect === 'grey' ? ' · 命中时解：' + greyTargetHint(s) : ''),
+        () => { exitSummonCtrl(); pickSummonHitEffect(s, owner, done); });
+  }
+  add('列表操作', '改回按钮列表（小屏更顺手）', () => {
+    exitSummonCtrl(); summonPanel(s, owner, done, true);
+  });
+}
+function summonCtrlClick(x, y){
+  const st = G.sumCtl;
+  if (!st) return;
+  const s = st.s, owner = st.owner, done = st.done;
+  if (!s || !s.alive){ exitSummonCtrl(); done(); return; }
+  if (s.room !== G.dungeon.currentRoom){ exitSummonCtrl(); renderSumCtlBar(); return; }
+
+  const tgt = tileOccupant(s.room, x, y);
+  if (tgt && tgt !== s && isEnemyOf(s, tgt)){
+    if (s.st && s.st.blue){
+      addLog(entLabel(s) + ' 处于【蓝】，无法攻击（需先受到一次攻击解除）。', 'sys');
+      render(); return;
+    }
+    if (hasBan(s, 'atk')){
+      addLog(entLabel(s) + ' 被戒律禁止攻击，无法出手。', 'sys');
+      render(); return;
+    }
+    const rng = summonRngOf(s), dist = entDist(s, tgt);
+    if (dist > rng){
+      addLog(entLabel(s) + ' 够不到 ' + entLabel(tgt) + '（距离 ' + dist +
+             '，射程 ' + rngTxt(rng) + '），先移动到它附近再点它。', 'sys');
+      render(); return;
+    }
+    exitSummonCtrl();
+    summonHumanGo(s, owner, { act:'atk', target: tgt }, done);
+    return;
+  }
+
+  if (x === s.pos.x && y === s.pos.y){
+    addLog(entLabel(s) + ' 已经站在这里了。');
+    render(); return;
+  }
+  if (moveLocked(s)){
+    addLog(entLabel(s) + ' 当前无法移动（' + moveLockReason(s) + '）。', 'sys');
+    render(); return;
+  }
+  if (reachableTiles(s, 2).some(t => t.x === x && t.y === y)){
+    exitSummonCtrl();
+    summonHumanGo(s, owner, { act:'move', pos:{ x:x, y:y } }, done);
+    return;
+  }
+  if (tgt){
+    addLog('（' + entLabel(tgt) + ' 站在那格上，无法落脚。）', 'sys');
+  } else if (Math.abs(x - s.pos.x) + Math.abs(y - s.pos.y) > 2){
+    addLog('超出本回合的移动范围（最多 2 格）。', 'sys');
+  } else {
+    addLog('那个位置被挡住了，走不过去。', 'sys');
+  }
+  render();
+}
+
+/* ============================================================
    画布点击交互（移动 / 查看格子）
    ============================================================ */
 cv.addEventListener('click', e => {
   if (!G || G.phase !== 'play' || !G.dungeon) return;
   if (G.animating) return;
+
+  // ★ 召唤物地图操控：召唤物回合里，点地图 = 移动 / 攻击（不占用玩家自己的点击逻辑）
+  if (G.sumCtl && !choiceOpen()){
+    const t = tileAtEvent(e);
+    if (t) summonCtrlClick(t.tx, t.ty);
+    return;
+  }
+
   const p = cur();
   if (!p || !p.alive || p.isMonster) return;
   if (p.actions <= 0) return;
   if (choiceOpen()) return;
 
-  const rect = cv.getBoundingClientRect();
-  const mx = (e.clientX - rect.left) * (MW / rect.width);
-  const my = (e.clientY - rect.top) * (MH / rect.height);
-  const room = G.dungeon.rooms[G.dungeon.currentRoom];
-  if (!room) return;
-  const pw = room.w * TILE_PX, ph = room.h * TILE_PX;
-  const ox = (MW - pw) / 2, oy = (MH - ph) / 2 + 20;
-  const tx = Math.floor((mx - ox) / TILE_PX);
-  const ty = Math.floor((my - oy) / TILE_PX);
-  if (tx < 0 || ty < 0 || tx >= room.w || ty >= room.h) return;
+  const tile0 = tileAtEvent(e);
+  if (!tile0) return;
+  const room = tile0.room, tx = tile0.tx, ty = tile0.ty;
 
   // 1. 点击了怪物 -> 攻击
   const ent = tileOccupant(p.room, tx, ty);
@@ -6444,7 +6748,7 @@ function drawDungeon(){
 
   // 移动范围高亮（如果是玩家回合且能移动）
   const hiP = G.players[G.turn];
-  if (hiP && hiP.alive && !hiP.isMonster && isHumanTurn() && hiP.actions > 0 && !moveLocked(hiP)) {
+  if (hiP && hiP.alive && !hiP.isMonster && isHumanTurn() && hiP.actions > 0 && !moveLocked(hiP) && !G.sumCtl) {
     const reachable = reachableTiles(hiP, 2);
     reachable.forEach(t => {
       const px = ox + t.x * TILE, py = oy + t.y * TILE;
@@ -6454,6 +6758,42 @@ function drawDungeon(){
       ctx.lineWidth = 1.5;
       ctx.strokeRect(px+2, py+2, TILE-4, TILE-4);
     });
+  }
+
+  // ★ 召唤物地图操控：紫色可达格 + 红色射程圈
+  if (G.sumCtl && G.sumCtl.s && G.sumCtl.s.alive){
+    const sc = G.sumCtl.s;
+    if (sc.room === G.dungeon.currentRoom){
+      if (!moveLocked(sc)){
+        reachableTiles(sc, 2).forEach(t => {
+          const px = ox + t.x * TILE, py = oy + t.y * TILE;
+          ctx.fillStyle = 'rgba(167,139,250,0.32)';
+          ctx.fillRect(px, py, TILE, TILE);
+          ctx.strokeStyle = 'rgba(196,181,253,0.95)';
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(px+2, py+2, TILE-4, TILE-4);
+        });
+      }
+      const srng = summonRngOf(sc);
+      foesOfEnt(sc).filter(t => t.alive && t.room === sc.room && t.pos && entDist(sc, t) <= srng)
+        .forEach(t => {
+          const px = ox + t.pos.x * TILE, py = oy + t.pos.y * TILE;
+          ctx.save();
+          ctx.strokeStyle = '#ff3d9a'; ctx.lineWidth = 2.5;
+          ctx.setLineDash([5,3]);
+          ctx.strokeRect(px+2, py+2, TILE-4, TILE-4);
+          ctx.restore();
+        });
+      if (sc.pos){
+        const px = ox + sc.pos.x * TILE, py = oy + sc.pos.y * TILE;
+        ctx.save();
+        ctx.strokeStyle = '#a78bfa'; ctx.lineWidth = 2.5;
+        ctx.strokeRect(px+1, py+1, TILE-2, TILE-2);
+        ctx.fillStyle = '#c4b5fd'; ctx.font = 'bold 9px system-ui'; ctx.textAlign = 'left';
+        ctx.fillText('▶操控', px + 3, py + 10);
+        ctx.restore();
+      }
+    }
   }
 
   const tx = txx => ox + txx*TILE + TILE/2;
