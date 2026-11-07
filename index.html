@@ -2519,7 +2519,14 @@ function cur(){
 }
 
 function consumeAction(p){
-  if (!p || !p.alive) return;
+  // ★ 如果玩家在本次行动中阵亡（比如被反伤弹死），立刻重判胜负并交接回合
+  if (!p || !p.alive) {
+    if (G && G.phase === 'play' && p === cur()) {
+      settleWin();
+      if (G.phase === 'play') finishTurn(p);
+    }
+    return;
+  }
   p.actions = Math.max(0, (p.actions || 0) - 1);
   render();
   if (p.actions <= 0){ finishTurn(p); return; }
