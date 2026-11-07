@@ -593,6 +593,8 @@ function canStep(roomId, x, y){
   if (!room) return false;
   if (x < 0 || y < 0 || x >= room.w || y >= room.h) return false;
   if (room.abyss && room.abyss.some(a => a.x === x && a.y === y)) return false;
+  // ★ 祭坛正中心那 1 格被祭坛占据，不可站立（交互需站在相邻格）
+  if (room.type === 'altar' && x === Math.floor(room.w/2) && y === Math.floor(room.h/2)) return false;
   if (tileOccupant(roomId, x, y)) return false;
   return true;
 }
@@ -2963,6 +2965,8 @@ function findLandingSpots(room, center, n){
   const tryAdd = (x, y) => {
     if (x < 0 || y < 0 || x >= room.w || y >= room.h) return false;
     if ((room.abyss||[]).some(a=>a.x===x&&a.y===y)) return false;
+    // ★ 祭坛正中心不可落脚
+    if (room.type === 'altar' && x === Math.floor(room.w/2) && y === Math.floor(room.h/2)) return false;
     if (out.some(o => o.x === x && o.y === y)) return false;
     if (tileOccupant(room.id, x, y)) return false;
     out.push({x, y});
@@ -5916,75 +5920,94 @@ cv.addEventListener('click', e => {
 
   if (room.type === 'altar'){
     const ax = Math.floor(room.w/2), ay = Math.floor(room.h/2);
-    if (Math.abs(tx - ax) <= 1 && Math.abs(ty - ay) <= 1){
-      if (Math.abs(tx - p.pos.x) + Math.abs(ty - p.pos.y) <= 1) {
-        const deadAllies = G.players.filter(q => !q.alive);
-        const opts = [];
+    // ★ 只有点正中心这 1 格，并且你已经在它相邻格时，才触发交互
+    if (tx === ax && ty === ay && Math.abs(tx - p.pos.x) + Math.abs(ty - p.pos.y) <= 1){
+      const deadAllies = G.players.filter(q => !q.alive);
+      const opts = [];
 
-        if (!room.altarUsed) {
-          opts.push({
-            label:'🔥 献祭（HP -10）',
-            sub:'换取随机刻印 / 遗器 / 金币',
-            run: () => {
-              if (p.hp <= 10) { addLog('生命值不足，无法献祭。', 'sys'); render(); return; }
-              p.hp -= 10;
-              room.altarUsed = true;
-              addLog(p.name + ' 进行了献祭，失去了 10 点生命。', 'hl');
-              const roll = Math.random();
-              if (roll < 0.4) {
-                grantSeal(p, 1, true);
-              } else if (roll < 0.75) {
-                grantYiqi(p, 1, true);
-              } else {
-                addGold(p, 15, '祭坛献祭');
-                addLog('祭坛涌出了 15 枚金币。', 'hl');
+      if (!room.altarUsed) {
+        opts.push({
+          label:'🔥 献祭（HP -10）',
+          sub:'换取随机刻印 / 遗器 / 金币',
+          run: () => {
+            if (p.hp <= 10) { addLog('生命值不足，无法献祭。', 'sys'); render(); return; }
+            p.hp -= 10;
+            room.altarUsed = true;
+            addLog(p.name + ' 进行了献祭，失去了 10 点生命。', 'hl');
+            const roll = Math.random();
+            if (roll < 0.4) {
+              grantSeal(p, 1, true);
+            } else if (roll < 0.75) {
+              grantYiqi(p, 1, true);
+            } else {
+              addGold(p, 15, '祭坛献祭');
+              addLog('祭坛涌出了 15 枚金币。', 'hl');
+              render();
+            }
+          }
+        });
+      }
+
+      if (deadAllies.length > 0) {
+        opts.push({
+          label:'✨ 祈求复苏',
+          sub:'消耗 20 金币复活一名队友（恢复 50% HP）',
+          run: () => {
+            if (goldOf(p) < 20) { addLog('金币不足，无法祈求复苏。', 'sys'); render(); return; }
+            showChoice('选择要复活的队友：', deadAllies.map(q => ({
+              label: q.name,
+              sub: '复活后恢复 50% HP',
+              run: () => {
+                addGold(p, -20, '祈求复苏');
+                q.alive = true;
+                q.hp = Math.floor(q.maxHp * 0.5);
+                q.room = p.room;
+                q.island = p.room;
+                q.pos = nearestFreeTile({ room: p.room, pos: {x: ax, y: ay} });
+                q.actions = 2;
+                q.charging = null;
+
+                addLog('【复苏】' + q.name + ' 在祭坛的光芒中重新站起！', 'hl');
+                floatText(entityPixel(q).x, entityPixel(q).y - 30, '复活！', '#4ade80');
+
+                // 如果当前没有在队列中（因为全队死光），需要重建队列
+                buildActorQueue();
                 render();
               }
-            }
-          });
-        }
-
-        if (deadAllies.length > 0) {
-          opts.push({
-            label:'✨ 祈求复苏',
-            sub:'消耗 20 金币复活一名队友（恢复 50% HP）',
-            run: () => {
-              if (goldOf(p) < 20) { addLog('金币不足，无法祈求复苏。', 'sys'); render(); return; }
-              showChoice('选择要复活的队友：', deadAllies.map(q => ({
-                label: q.name,
-                sub: '复活后恢复 50% HP',
-                run: () => {
-                  addGold(p, -20, '祈求复苏');
-                  q.alive = true;
-                  q.hp = Math.floor(q.maxHp * 0.5);
-                  q.room = p.room;
-                  q.island = p.room;
-                  q.pos = nearestFreeTile({ room: p.room, pos: {x: ax, y: ay} });
-                  q.actions = 2;
-                  q.charging = null;
-
-                  addLog('【复苏】' + q.name + ' 在祭坛的光芒中重新站起！', 'hl');
-                  floatText(entityPixel(q).x, entityPixel(q).y - 30, '复活！', '#4ade80');
-
-                  // 如果当前没有在队列中（因为全队死光），需要重建队列
-                  buildActorQueue();
-                  render();
-                }
-              })), () => render());
-            }
-          });
-        }
-
-        if (opts.length > 0) {
-          showChoice('祭坛闪烁着微光……', opts, () => render());
-        } else {
-          addLog('这座祭坛已经失去了光泽。');
-        }
-      } else {
-        addLog('请走到祭坛中心旁边。');
+            })), () => render());
+          }
+        });
       }
-      return;
+
+      if (opts.length > 0) {
+        showChoice('祭坛闪烁着微光……', opts, () => render());
+      } else {
+        addLog('这座祭坛已经失去了光泽。');
+      }
+      return; // 交互完正常返回
     }
+    // ★ 点了祭坛格但站得远：中心格不能站，自动走向祭坛旁最近的落脚格
+    if (tx === ax && ty === ay){
+      if (moveLocked(p)){
+        addLog(p.name + ' 当前无法移动（' + moveLockReason(p) + '）。', 'sys');
+        render();
+        return;
+      }
+      const reach = reachableTiles(p, 2);
+      const spots = [
+        {x: ax + 1, y: ay}, {x: ax - 1, y: ay},
+        {x: ax, y: ay + 1}, {x: ax, y: ay - 1}
+      ]
+        .filter(s => reach.some(r => r.x === s.x && r.y === s.y))
+        .sort((a, b) => (Math.abs(a.x - p.pos.x) + Math.abs(a.y - p.pos.y))
+                      - (Math.abs(b.x - p.pos.x) + Math.abs(b.y - p.pos.y)));
+      if (spots.length){
+        moveToTile(p, spots[0].x, spots[0].y);
+        return;
+      }
+      // 本回合够不到：交给下面的普通移动逻辑去报「太远了 / 走不过去」
+    }
+    // ★ 点的是别的格子：不 return，继续往下走正常的「移动」逻辑
   }
 
   if (room.type === 'shop'){
@@ -6487,11 +6510,21 @@ function drawDungeon(){
   }
 
   if (room.type === 'altar'){
-    const px = tx(Math.floor(room.w/2)), py = ty(Math.floor(room.h/2));
+    const cx = tx(Math.floor(room.w/2)), cy = ty(Math.floor(room.h/2));
+    const px = cx - TILE/2, py = cy - TILE/2;
     ctx.save();
-    ctx.font = '36px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.globalAlpha = room.altarUsed ? 0.2 : 1;
-    ctx.fillText('🔮', px, py);
+
+    // 画 1 格的发光底座
+    ctx.fillStyle = room.altarUsed ? 'rgba(167, 139, 250, 0.05)' : 'rgba(167, 139, 250, 0.2)';
+    ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+    ctx.strokeStyle = room.altarUsed ? 'rgba(167, 139, 250, 0.2)' : '#a78bfa';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(px + 2, py + 2, TILE - 4, TILE - 4);
+
+    ctx.font = '28px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.globalAlpha = room.altarUsed ? 0.3 : 1;
+    if (!room.altarUsed) { ctx.shadowBlur = 10; ctx.shadowColor = '#a78bfa'; }
+    ctx.fillText('🕯️', px + TILE/2, py + TILE/2);
     ctx.restore();
   }
 
@@ -6549,6 +6582,44 @@ function drawDungeon(){
   (G.players ||[]).filter(p => p.alive && p.room===cur && p.pos).forEach(drawEnt);
   (G.summons ||[]).filter(s => s.alive && s.room===cur && s.pos).forEach(drawEnt);
   (G.monsters||[]).filter(m => m.alive && m.room===cur && m.pos).forEach(drawEnt);
+
+  // ★ 绘制地上的掉落物
+  Object.keys(G.drops).forEach(key => {
+    const [rId, sx, sy] = key.split(':');
+    if (Number(rId) !== cur) return; // 不是当前房间的掉落不画
+
+    const dx = Number(sx), dy = Number(sy);
+    const list = G.drops[key];
+    if (!list || !list.length) return;
+
+    const px = tx(dx), py = ty(dy);
+
+    // 1. 画一个金色微光底座，提示这里有东西
+    ctx.save();
+    ctx.fillStyle = 'rgba(255, 202, 58, 0.25)';
+    ctx.beginPath(); ctx.arc(px, py, TILE * 0.35, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#ffca3a'; ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.arc(px, py, TILE * 0.35, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+
+    // 2. 画物品图标（取最后一个掉落的）
+    const topItem = list[list.length - 1];
+    const icon = ITEMS[topItem.id] ? ITEMS[topItem.id].icon : '🎁';
+
+    ctx.save();
+    ctx.font = '22px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.shadowBlur = 8; ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.fillText(icon, px, py - 4); // 稍微往上偏移一点，避免和角色图标完全重叠
+
+    // 3. 如果物品大于1个，右下角画个数量角标
+    if (list.length > 1) {
+      ctx.fillStyle = '#ffca3a';
+      ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+      ctx.fillText('×' + list.length, px + TILE/2 - 4, py + TILE/2 - 4);
+    }
+    ctx.restore();
+  });
 
   fx.forEach(f => {
     ctx.save();
