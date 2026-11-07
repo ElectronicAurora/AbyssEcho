@@ -1182,6 +1182,7 @@ function createPlayer(i, name, isAI, maxHp){
     gold: 10,
     shopUsed: 0,
     cangmingGetRound: 0,   // ★ 获得沧溟时的轮次（0 = 从未获得）；本轮的回合开始不触发
+    safeRounds: 0,         // ★ 深渊侵蚀：在无怪房间连续待了几回合
   };
 }
 function mkState(){
@@ -1983,6 +1984,10 @@ function stateText(e){
     out.push('黑·' + s.blackSeals.map(x => sealDisplayName(x.id)).join('+'));
   s.precepts.forEach(x => out.push('禁' + BAN_NAME[x.ban].replace('禁止','')));
   (s.sanctions || []).forEach(x => out.push('罚·' + BAN_NAME[x.ban].replace('禁止','') + '×' + x.n));
+  // ★ 侵蚀倒计时提示
+  if (e.safeRounds > 0 && G && G.dungeon && G.dungeon.floor >= 3 && !e.isMonster && !e.isSummon) {
+    out.push('侵蚀' + e.safeRounds + '/3');
+  }
   return out.join(' · ');
 }
 function skillSelectable(e){
@@ -2312,14 +2317,23 @@ function killEnt(victim, killer, toVoid){
       if (!k.isMonster && k.alive) addGold(k, gold, '击杀' + victim.name);
     }
     if (victim.tier === 'boss'){
-      if (killer){
-        const k = killer.isSummon ? G.players[killer.owner] : killer;
-        if (!k.isMonster && k.alive){
-          const loot = pick(YIQI_IDS);
-          addItem(k, loot);
-          equipAuto(k);
-          addLog('【BOSS 掉落】' + k.name + ' 直接获得遗器【' + ITEMS[loot].icon + ' ' + ITEMS[loot].name + '】！', 'hl');
-        }
+      // ★ 掉落率计算：第 1 层 100%，第 2 层 50%，第 3 层 30%
+      //    无尽模式（第 4 层起）：每 3 层保底 1 次（100%），其余层极小概率（10%）
+      const f = G.dungeon.floor;
+      let dropRate = 0;
+      if (f === 1) dropRate = 1.0;
+      else if (f === 2) dropRate = 0.5;
+      else if (f === 3) dropRate = 0.3;
+      else dropRate = (f % 3 === 0) ? 1.0 : 0.1;
+
+      if (Math.random() < dropRate){
+        const key = victim.room + ':' + victim.pos.x + ':' + victim.pos.y;
+        G.drops[key] = G.drops[key] || [];
+        const loot = pick(YIQI_IDS);
+        G.drops[key].push(mkItem(loot));
+        addLog('【首领战利品】一件遗器掉落在地上，需要前往该格拾取！', 'hl');
+      } else {
+        addLog('【首领战利品】首领没有掉落遗器。', 'sys');
       }
     } else if (victim.tier === 'elite' && !victim.isSummonedByBoss && Math.random() < 0.3){
       const key = victim.room + ':' + victim.pos.x + ':' + victim.pos.y;
@@ -2526,17 +2540,20 @@ function startTurn(){
     if (totalMonsters === 0) { // 在安全房
       p.safeRounds = (p.safeRounds || 0) + 1;
       if (p.safeRounds >= 3) {
-        addLog('【深渊侵蚀】地牢的暗影正在吞噬你的生命……（-5 HP）', 'hl');
-        p.hp -= 5;
-        floatText(MW/2, MH/2, '-5 HP 侵蚀', '#ff3d9a');
+        addLog('【深渊侵蚀】地牢的暗影正在吞噬你的生命……', 'hl');
+        // ★ 走真实伤害管线：无视护盾与减伤，会清空【尘】并触发忘川判定
+        dealDamage(p, 5, {trueDmg: true, ignoreDust: true, tag: '深渊侵蚀', notHit: true, srcEnt: null});
         p.safeRounds = 0;
-        if (p.hp <= 0) {
-          killEnt(p, null);
-          settleWin();
-          return;
-        }
+        if (!p.alive){ settleWin(); return; }      // 被侵蚀致死，停下当前回合
+        if (G.phase !== 'play') return;
+      } else {
+        // ★ 倒计时预警提示
+        addLog('【侵蚀预警】安全房的暗影正在聚集……还需 ' + (3 - p.safeRounds) + ' 回合爆发侵蚀！', 'sys');
+        const epos = entityPixel(p);
+        floatText(epos.x, epos.y - 30, '侵蚀 ' + p.safeRounds + '/3', '#ff3d9a');
       }
     } else {
+      if (p.safeRounds > 0) addLog('【侵蚀解除】遭遇敌人，深渊侵蚀计时已重置。', 'sys');
       p.safeRounds = 0; // 遇到怪重置计时
     }
   }
@@ -5581,6 +5598,8 @@ function render(){
         '<span class="tag ' + (q.isAI ? 'ai' : 'you') + '">' + (q.isAI ? 'AI' : 'YOU') + '</span>' +
         (q.dodgeReady ? '<span class="dodgetag" title="下一次受击必定闪避">蓄闪</span>' : '') +
         (!q.dodgeReady && G.round <= (q.dodgeCdRound || 0) ? '<span class="dodgecd" title="蓄闪冷却中">闪冷却</span>' : '') +
+        // ★ 侵蚀倒计时徽章
+        (q.safeRounds > 0 && G.dungeon && G.dungeon.floor >= 3 ? '<span class="bosstag" style="border-color:#ff3d9a;color:#ff3d9a;background:rgba(255,61,154,.15)" title="再待 ' + (3 - q.safeRounds) + ' 回合将爆发深渊侵蚀">⚠ 侵蚀 ' + q.safeRounds + '/3</span>' : '') +
         '<span class="hpv">' + (q.hp < 0 ? q.hp : Math.max(0,q.hp)) + '/' + q.maxHp +
         (q.shield > 0 ? ' <span class="shv">盾' + q.shield + '</span>' : '') +
         (q.hp < 0 ? '（忘川·负值存活）' : '') + '</span>' +
