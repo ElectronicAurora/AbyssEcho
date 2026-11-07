@@ -970,6 +970,18 @@ function spawnMonster(type, roomId, pos, summonedByBoss){
       m.skillCd = Math.max(1, 3 - endlessCycle); // 末环之影黑洞 CD 缩短
     }
   }
+  // ★ 荆棘反噬：只对单段高伤生效；BOSS 无封顶，精英有 cap
+  if (T.tier === 'boss') {
+    const THORNS = {
+      boss_1: { threshold: 30, ratio: 0.5 },   // 无 cap
+      boss_2: { threshold: 32, ratio: 0.6 },
+      boss_3: { threshold: 35, ratio: 0.7 },
+    };
+    if (THORNS[type]) m.thorns = { ...THORNS[type] };
+  }
+  if (type === 'devourer') {
+    m.thorns = { threshold: 15, ratio: 0.5, cap: 8 };
+  }
   m.actions = 0; // 确保当回合不动
   G.monsters.push(m);
   return m;
@@ -1986,8 +1998,8 @@ function stateText(e){
   s.precepts.forEach(x => out.push('禁' + BAN_NAME[x.ban].replace('禁止','')));
   (s.sanctions || []).forEach(x => out.push('罚·' + BAN_NAME[x.ban].replace('禁止','') + '×' + x.n));
   // ★ 侵蚀倒计时提示
-  if (e.safeRounds > 0 && G && G.dungeon && G.dungeon.floor >= 3 && !e.isMonster && !e.isSummon) {
-    out.push('侵蚀' + e.safeRounds + '/3');
+  if (e.safeRounds > 0 && G && G.dungeon && !e.isMonster && !e.isSummon) {
+    out.push('侵蚀' + e.safeRounds + '/' + safeRoundsLimit());
   }
   return out.join(' · ');
 }
@@ -2147,6 +2159,21 @@ function dealDamage(tgt, raw, opt){
   if (!opt.notHit && tgt.st.blue){
     tgt.st.blue = false;
     addLog(entLabel(tgt) + ' 的【蓝】解除（下次受击）。');
+  }
+  // ★ 荆棘反噬：单段高伤触发；cap 存在才封顶
+  // 判定用「减免后、锁血前」的伤害 —— 否则锁血把大伤害截成小数字，反伤会失效
+  const realDmg = dmg;
+  if (!opt.noReflect && opt.srcEnt && tgt.thorns && realDmg >= tgt.thorns.threshold){
+    const th = tgt.thorns;
+    let reflect = Math.floor((realDmg - th.threshold) * th.ratio);
+    if (th.cap != null) reflect = Math.min(th.cap, reflect);   // ★ undefined 不参与 Math.min
+    if (reflect > 0 && opt.srcEnt.alive){
+      addLog('【荆棘反噬】' + entLabel(tgt) + ' 反弹了 ' + reflect + ' 点真实伤害给 ' + entLabel(opt.srcEnt), 'hl');
+      floatText(entityPixel(opt.srcEnt).x, entityPixel(opt.srcEnt).y - 30, '反伤 -' + reflect, '#ff5a5a');
+      dealDamage(opt.srcEnt, reflect, {
+        trueDmg: true, ignoreDust: false, tag: '反伤', notHit: true, noReflect: true
+      });
+    }
   }
   if (tgt.hp <= 0 && tgt.alive){
     // BOSS 锁血：还没到最终段就不死
@@ -2514,6 +2541,12 @@ function endCurrentAction(p){
   else afterMainAction(p);
 }
 
+/* ★ 深渊侵蚀阈值：前两层宽松（5 回合），第 3 层起收紧（3 回合） */
+function safeRoundsLimit(){
+  const f = (G && G.dungeon) ? G.dungeon.floor : 1;
+  return f <= 2 ? 5 : 3;
+}
+
 function startTurn(){
   if (G.phase !== 'play') return;
   G.turnEnded = false;
@@ -2544,13 +2577,14 @@ function startTurn(){
   clearPreceptsBy(p);
   hideChoice();
 
-  // ★ 深渊侵蚀（从第 3 层起，逼玩家不能无限挂机）
-  if (G.dungeon.floor >= 3 && p.alive) {
+  // ★ 深渊侵蚀（从第 1 层起就计数，逼玩家不能无限挂机；阈值随层数变化）
+  if (p.alive) {
     let totalMonsters = 0;
     G.monsters.forEach(m => { if (m.alive && m.room === G.dungeon.currentRoom) totalMonsters++; });
     if (totalMonsters === 0) { // 在安全房
       p.safeRounds = (p.safeRounds || 0) + 1;
-      if (p.safeRounds >= 3) {
+      const LIMIT = safeRoundsLimit();
+      if (p.safeRounds >= LIMIT) {
         addLog('【深渊侵蚀】地牢的暗影正在吞噬你的生命……', 'hl');
         // ★ 走真实伤害管线：无视护盾与减伤，会清空【尘】并触发忘川判定
         dealDamage(p, 5, {trueDmg: true, ignoreDust: true, tag: '深渊侵蚀', notHit: true, srcEnt: null});
@@ -2559,9 +2593,9 @@ function startTurn(){
         if (G.phase !== 'play') return;
       } else {
         // ★ 倒计时预警提示
-        addLog('【侵蚀预警】安全房的暗影正在聚集……还需 ' + (3 - p.safeRounds) + ' 回合爆发侵蚀！', 'sys');
+        addLog('【侵蚀预警】安全房的暗影正在聚集……还需 ' + (LIMIT - p.safeRounds) + ' 回合爆发侵蚀！', 'sys');
         const epos = entityPixel(p);
-        floatText(epos.x, epos.y - 30, '侵蚀 ' + p.safeRounds + '/3', '#ff3d9a');
+        floatText(epos.x, epos.y - 30, '侵蚀 ' + p.safeRounds + '/' + LIMIT, '#ff3d9a');
       }
     } else {
       if (p.safeRounds > 0) addLog('【侵蚀解除】遭遇敌人，深渊侵蚀计时已重置。', 'sys');
@@ -2877,11 +2911,13 @@ function moveToRoom(p, dir){
   const dest = G.dungeon.rooms[destId];
   if (!dest) return;
   const squad = G.players.filter(q => q.alive && q.room === p.room);
+  const summons = (G.summons || []).filter(s => s.alive && s.room === p.room);
   const oppDir = { N:'S', S:'N', W:'E', E:'W' }[dir];
   const doors = doorTiles(dest);
   const doorTile = doors[oppDir];
   if (!doorTile){ addLog('目标房间没有对应的门。'); render(); return; }
-  const landings = findLandingSpots(dest, doorTile, squad.length);
+  // ★ 玩家优先占前几个落点，召唤物排后面
+  const landings = findLandingSpots(dest, doorTile, squad.length + summons.length);
   squad.forEach((q, i) => {
     q.room = destId;
     q.island = destId;
@@ -2889,6 +2925,19 @@ function moveToRoom(p, dir){
     markActed(q, 'move');
     breakCharge(q, ' 换房了');
     q.movedThisTurn = true;
+    // ★ 换房重置深渊侵蚀计时
+    if (q.safeRounds > 0){
+      addLog('【侵蚀重置】' + q.name + ' 换房，深渊侵蚀计时清零。', 'sys');
+      q.safeRounds = 0;
+    }
+  });
+  // ★ 召唤物免费跟随（游侠的 follow 逻辑保留，作为格内移动的兜底）
+  summons.forEach((s, i) => {
+    const spot = landings[squad.length + i] || nearestFreeTile({ room: destId, pos: doorTile });
+    s.room = destId;
+    s.island = destId;
+    s.pos = spot;
+    s.movedThisTurn = true;
   });
   G.dungeon.currentRoom = destId;
   dest.visited = true;
@@ -4531,17 +4580,49 @@ function actItem(p){
       showChoice('传送到哪个房间？', neighIds.map(rid => ({
         label: roomName(rid), run: () => {
           removeUid(p, uid);
-          const squad = G.players.filter(q => q.alive && q.room === p.room);
-          squad.forEach(q => {
-            q.room = rid; q.island = rid;
-            q.pos = nearestFreeTile(q);
+          const fromId = p.room;
+          const dest = G.dungeon.rooms[rid];
+          const squad = G.players.filter(q => q.alive && q.room === fromId);
+          const summons = (G.summons || []).filter(s => s.alive && s.room === fromId);
+          // ★ 先在新房间的坐标系里算好落点，再改 q.room（否则旧坐标可能在新房间越界）
+          const doors = doorTiles(dest);
+          let doorTile = null;
+          Object.keys(dest.exits).forEach(k => {
+            if (dest.exits[k] === fromId && doors[k]) doorTile = doors[k];
+          });
+          if (!doorTile){
+            const firstDir = Object.keys(doors).find(k => doors[k]);
+            doorTile = firstDir ? doors[firstDir] : null;
+          }
+          if (!doorTile) doorTile = nearestFreeTile({ room: rid, pos: { x: 2, y: 2 } });
+          const landings = findLandingSpots(dest, doorTile, squad.length + summons.length);
+          squad.forEach((q, i) => {
+            const spot = landings[i] || doorTile;
+            q.room = rid; q.island = rid; q.pos = spot;
             q.movedThisTurn = true;
             breakCharge(q, ' 传送了');
+            // ★ 传送等同于换房，同样重置深渊侵蚀计时
+            if (q.safeRounds > 0){
+              addLog('【侵蚀重置】' + q.name + ' 传送，深渊侵蚀计时清零。', 'sys');
+              q.safeRounds = 0;
+            }
+          });
+          // ★ 召唤物免费跟随（与 moveToRoom 一致，避免巨兽/幽灵/傀儡掉队）
+          summons.forEach((s, i) => {
+            s.room = rid; s.island = rid;
+            s.pos = landings[squad.length + i] || nearestFreeTile({ room: rid, pos: doorTile });
+            s.movedThisTurn = true;
           });
           markActed(p, 'item');
           G.dungeon.currentRoom = rid;
           G.dungeon.rooms[rid].visited = true;
           addLog(p.name + ' 使用传送器 → ' + roomName(rid), 'hl');
+          // ★ 目的地有怪：重建行动队列，否则怪物不在队列里，玩家回合结束后会卡住
+          const newHasMonsters = (G.monsters || []).some(m => m.alive && m.room === rid);
+          if (newHasMonsters){
+            buildActorQueue();
+            addLog('「' + roomName(rid) + '」中有敌人！', 'hl');
+          }
           pickup(p); checkRetrieve(p);
           consumeAction(p);
         }
@@ -5659,7 +5740,7 @@ function render(){
         (q.dodgeReady ? '<span class="dodgetag" title="下一次受击必定闪避">蓄闪</span>' : '') +
         (!q.dodgeReady && G.round <= (q.dodgeCdRound || 0) ? '<span class="dodgecd" title="蓄闪冷却中">闪冷却</span>' : '') +
         // ★ 侵蚀倒计时徽章
-        (q.safeRounds > 0 && G.dungeon && G.dungeon.floor >= 3 ? '<span class="bosstag" style="border-color:#ff3d9a;color:#ff3d9a;background:rgba(255,61,154,.15)" title="再待 ' + (3 - q.safeRounds) + ' 回合将爆发深渊侵蚀">⚠ 侵蚀 ' + q.safeRounds + '/3</span>' : '') +
+        (q.safeRounds > 0 && G.dungeon ? '<span class="bosstag" style="border-color:#ff3d9a;color:#ff3d9a;background:rgba(255,61,154,.15)" title="再待 ' + (safeRoundsLimit() - q.safeRounds) + ' 回合将爆发深渊侵蚀">⚠ 侵蚀 ' + q.safeRounds + '/' + safeRoundsLimit() + '</span>' : '') +
         '<span class="hpv">' + (q.hp < 0 ? q.hp : Math.max(0,q.hp)) + '/' + q.maxHp +
         (q.shield > 0 ? ' <span class="shv">盾' + q.shield + '</span>' : '') +
         (q.hp < 0 ? '（忘川·负值存活）' : '') + '</span>' +
@@ -6135,13 +6216,13 @@ const MONSTER_DATA = {
   elite: [
     { name:'兽人', icon:'👹', hp:'28', atk:'6', def:'2', rng:'1', act:'2', desc:'<b>【狂怒】</b>半血时清空自身负面，DEF 降为 0，ATK 大幅提升。<br><b>【碎裂重击】</b>（第 3 层起）1.5 倍伤害，永久摧毁目标一件护甲或武器；目标空手时改为 10 点真实伤害。' },
     { name:'渊火咒术师', icon:'🔮', hp:'22', atk:'5', def:'2', rng:'3', act:'1', desc:'<b>【咒火洗礼】</b>每 2 回合，对同房间所有玩家造成 4 点真实伤害并施加【蓝】。<br><b>【秽土转生】</b>受击时，50% 概率瞬移到同房间随机空格（每回合限 1 次）。' },
-    { name:'噬盾吞噬者', icon:'🩸', hp:'38', atk:'6', def:'5', rng:'1', act:'1', desc:'<b>【吞噬护盾】</b>同房间内玩家获得护盾时，截胡一半（自身最多 20 盾）。<br><b>【重碾】</b>攻击命中时，若目标有【尘】，直接清零并附加等量真实伤害。' },
+    { name:'噬盾吞噬者', icon:'🩸', hp:'38', atk:'6', def:'5', rng:'1', act:'1', desc:'<b>【吞噬护盾】</b>同房间内玩家获得护盾时，截胡一半（自身最多 20 盾）。<br><b>【重碾】</b>攻击命中时，若目标有【尘】，直接清零并附加等量真实伤害。<br><b>【荆棘反噬】</b>单次受到 ≥15 点伤害时，把超出部分的 50% 反弹为真实伤害（单次最多 8 点）。' },
     { name:'噬法幽魂', icon:'🕷️', hp:'15', atk:'0', def:'1', rng:'3', act:'1', desc:'<b>【虚空净化】</b>开局立刻释放（CD 3），对同房间所有玩家强制清空【尘】、【护盾】、【蓄闪】和【白】，不造成伤害。<br>极度恐惧近战，会不断后退。' },
   ],
   boss: [
-    { name:'地牢看守', icon:'👑', hp:'80', atk:'8', def:'3', rng:'1', act:'2', desc:'<b>【锁血】</b>2 段血（第 2 层起为 3 段）。锁血时不清理负面。<br><b>【深渊同化】</b>攻击被玩家大幅减伤（减免>50%）时，永久 ATK+2、DEF+1。<br><b>【战吼】</b>进入 P2 时，全场施加 2 回合【黄】并召唤精英。' },
-    { name:'深渊领主', icon:'😈', hp:'120', atk:'10', def:'5', rng:'1', act:'2', desc:'<b>【锁血】</b>3 段血。不清理负面，带有同化机制。<br><b>【深渊诅咒】</b>所有攻击附带 1 层【撕裂】。<br><b>【召唤】</b>进入 P2 召唤咒术师，P3 召唤吞噬者。' },
-    { name:'末环之影', icon:'👾', hp:'180', atk:'12', def:'6', rng:'1', act:'3', desc:'<b>【锁血】</b>3 段血。不清理负面，带有同化机制。<br><b>【引力黑洞】</b>将所有玩家拉到身边并造成 5 点真伤。<br><b>【深渊处决】</b>对 HP ≤ 30% 的残血玩家直接斩杀。<br><b>【召唤】</b>P2 召唤 2 吞噬者，P3 召唤 2 咒术师。' },
+    { name:'地牢看守', icon:'👑', hp:'80', atk:'8', def:'3', rng:'1', act:'2', desc:'<b>【锁血】</b>2 段血（第 2 层起为 3 段）。锁血时不清理负面。<br><b>【深渊同化】</b>攻击被玩家大幅减伤（减免>50%）时，永久 ATK+2、DEF+1。<br><b>【战吼】</b>进入 P2 时，全场施加 2 回合【黄】并召唤精英。<br><b>【荆棘反噬】</b>单次受到 ≥30 点伤害时，把超出部分的 50% 反弹为真实伤害（无上限）。' },
+    { name:'深渊领主', icon:'😈', hp:'120', atk:'10', def:'5', rng:'1', act:'2', desc:'<b>【锁血】</b>3 段血。不清理负面，带有同化机制。<br><b>【深渊诅咒】</b>所有攻击附带 1 层【撕裂】。<br><b>【召唤】</b>进入 P2 召唤咒术师，P3 召唤吞噬者。<br><b>【荆棘反噬】</b>单次受到 ≥32 点伤害时，把超出部分的 60% 反弹为真实伤害（无上限）。' },
+    { name:'末环之影', icon:'👾', hp:'180', atk:'12', def:'6', rng:'1', act:'3', desc:'<b>【锁血】</b>3 段血。不清理负面，带有同化机制。<br><b>【引力黑洞】</b>将所有玩家拉到身边并造成 5 点真伤。<br><b>【深渊处决】</b>对 HP ≤ 30% 的残血玩家直接斩杀。<br><b>【召唤】</b>P2 召唤 2 吞噬者，P3 召唤 2 咒术师。<br><b>【荆棘反噬】</b>单次受到 ≥35 点伤害时，把超出部分的 70% 反弹为真实伤害（无上限）。' },
   ]
 };
 
