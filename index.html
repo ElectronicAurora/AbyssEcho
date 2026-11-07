@@ -547,6 +547,7 @@ const MONSTERS = {
   boss_3: { name:'末环之影',   icon:'👾', hp:180,atk:12, def:6, rng:1, actions:3, aim:'nearest', tier:'boss',   skill:'blackhole', cd:3 },
   warlock:  { name:'渊火咒术师', icon:'🔮', hp:22, atk:5, def:2, rng:3, actions:1, aim:'lowest',  tier:'elite', skill:'curse_fire', cd:2 },
   devourer: { name:'噬盾吞噬者', icon:'🩸', hp:38, atk:6, def:5, rng:1, actions:1, aim:'nearest', tier:'elite', skill:'devour', cd:0 },
+  weaver:   { name:'噬法幽魂', icon:'🕷️', hp:15, atk:0, def:1, rng:3, actions:1, aim:'nearest', tier:'elite', skill:'strip',  cd:0 },
 };
 
 function doorTiles(room){
@@ -798,7 +799,7 @@ function generateDungeon(floor){
       }
     } else if (r.type === 'elite') {
       const count = 1 + Math.floor(diff.extraMobs / 2);
-      const eliteTypes = ['orc', 'warlock', 'devourer'];
+      const eliteTypes = ['orc', 'warlock', 'devourer', 'weaver'];
       for(let i=0; i<count; i++){
         const pos = freeSpot(r);
         const eType = floor === 1 ? (Math.random() < 0.5 ? 'orc' : 'warlock') : pick(eliteTypes);
@@ -1181,7 +1182,7 @@ function createPlayer(i, name, isAI, maxHp){
     lastPrecept: null,
     gold: 10,
     shopUsed: 0,
-    cangmingGetRound: 0,   // ★ 获得沧溟时的轮次（0 = 从未获得）；本轮的回合开始不触发
+    cangmingGetRound: -1,  // ★ 获得沧溟时的个人回合序号（-1 = 从未获得）；获得当轮的回合开始不触发
     safeRounds: 0,         // ★ 深渊侵蚀：在无怪房间连续待了几回合
   };
 }
@@ -1369,7 +1370,7 @@ function itemUidOf(p, id){ const it = p.bag.find(x => x.id === id); return it ? 
 function addItem(p, id){
   const it = mkItem(id);
   p.bag.push(it);
-  if (id === 'yq_cangming') p.cangmingGetRound = (G && G.round) || 1; // 记录获得轮次，本轮的回合开始不触发
+  if (id === 'yq_cangming') p.cangmingGetRound = p.turnSeq; // ★ 记录获得时的个人回合序号
   return it.uid;
 }
 function removeUid(p, uid){ const i = p.bag.findIndex(it => uidEq(it.uid, uid)); if (i >= 0) p.bag.splice(i,1); }
@@ -2045,10 +2046,8 @@ function onBossLock(t, floor){
   if (t.phaseIndex >= t.bossPhases.length - 1) return;   // 防御：最终段不再锁
   t.hp = floor;
   t.phaseIndex += 1;
-  const keepBlack = (t.st && t.st.blackSeals) ? t.st.blackSeals : [];
-  t.st = mkState();               // 清空全部负面（【黑】保留）
-  t.st.blackSeals = keepBlack;
-  t.st.black = keepBlack.length > 0;
+
+  // ★ 移除清空负面状态的逻辑，只保留阶段强化和召唤
   if (t.phaseIndex === 1) t.atk += 2;
   if (t.phaseIndex === 2){ t.atk += 4; t.actions += 1; t.maxActions += 1; }
   addLog('【锁血】' + t.name + ' 进入第 ' + (t.phaseIndex + 1) + ' 阶段！', 'hl');
@@ -2061,7 +2060,7 @@ function onBossLock(t, floor){
   if (t.type === 'boss_1' && t.phaseIndex === 1) {
     addLog('【战吼】' + t.name + ' 发出震耳欲聋的咆哮！', 'hl');
     allEnts().forEach(e => {
-      if (!e.isMonster && e.alive) {
+      if (!e.isMonster && e.alive && !e.st.white) { // ★ 战吼被白免疫
         e.st.yellow = Math.max(e.st.yellow, 2);
       }
     });
@@ -2197,6 +2196,18 @@ function attackResolve(src, tgt, opt){
   }
 
   const dealt = dealDamage(tgt, dmg, {srcEnt:src, trueDmg: !!opt.trueDmg});
+
+  // ★ BOSS 的【深渊同化】：打不穿防御就变强
+  if (src.isBoss && tgt.alive && !src.syncedThisTurn) {
+    const theoreticalDmg = Math.max(0, atk - def);
+    if (theoreticalDmg > 0 && dealt <= Math.floor(theoreticalDmg * 0.5)) {
+      src.syncedThisTurn = true;
+      src.atk += 2;
+      src.def += 1;
+      addLog('【深渊同化】' + entLabel(src) + ' 未能击穿玩家的防御，吞噬了溢出的能量：ATK +2，DEF +1！', 'hl');
+      floatText(entityPixel(src).x, entityPixel(src).y - 40, '同化：ATK+2 DEF+1', '#ff3d9a');
+    }
+  }
 
   // ★ 渊火咒术师受击闪避（土移转生，每回合最多一次）
   if (tgt.type === 'warlock' && tgt.alive && !tgt.dodgedThisRound && entDist(src, tgt) > 0){
@@ -2572,8 +2583,8 @@ function startTurn(){
         render();
         if (p.isAI && typeof aiAct === 'function'){ later(() => { aiAct(p); }, 150); }
       };
-      // ★ 沧溟：记录获得轮次，只有「获得那一轮」的回合开始不触发，下一轮立刻生效
-      const cangmingJustGot = (p.cangmingGetRound > 0 && G.round <= p.cangmingGetRound);
+      // ★ 沧溟：按个人回合序号判定，只有「获得那一轮」的回合开始不触发，下一轮立刻生效
+      const cangmingJustGot = (p.cangmingGetRound >= 0 && p.turnSeq <= p.cangmingGetRound);
       if (cangmingJustGot) {
         // 本轮的回合开始不触发（等同"获得当回合不生效"），无需其他动作
       } else if (hasCangming(p) && p.alive && roomHasEnemies()){
@@ -2745,7 +2756,7 @@ function pickup(p){
   if (rest.length){
     for (const it of rest) {
       p.bag.push(it);
-      if (it.id === 'yq_cangming') p.cangmingGetRound = (G && G.round) || 1; // ★ 记录获得轮次（拾取）
+      if (it.id === 'yq_cangming') p.cangmingGetRound = p.turnSeq; // ★ 记录获得时的个人回合序号（拾取）
     }
     addLog(p.name + ' 拾获：' + rest.map(it=>ITEMS[it.id].name).join('、'), 'hl');
   }
@@ -2795,6 +2806,8 @@ function moveLocked(e){
   if (!e) return false;
   if (hasBan(e, 'move')) return true;
   if (e.st && e.st.yellow > 0) return true;
+  // ★ BOSS 免疫 ⑨b 撕裂带来的「DEF < 0 禁足」，但仍承受 DEF < 0 的增伤
+  if (e.isBoss) return false;
   return getDef(e) < 0;
 }
 /* 给「无法移动」一句人话原因 */
@@ -5171,6 +5184,7 @@ function monsterStartTurn(m){
   if (m.skillCd > 0) m.skillCd--;
   m.actedBans = [];
   m.dodgedThisRound = false;      // ★ 渊火咒术师·土移转生：每回合只触发一次
+  m.syncedThisTurn = false;       // ★ 重置【深渊同化】
   hideChoice();
   render();
   if (!turnStartTick(m)){ // 回合开始结算可能被撕裂打死
@@ -5251,6 +5265,42 @@ function monsterAct(m){
   const dist = entDist(m, target);
   const rng = m.rng || 0;
 
+  // ★ 噬法幽魂 AI
+  if (m.type === 'weaver') {
+    if (m.skillCd <= 0 && foes.length > 0) {
+      m.skillCd = 3;
+      markActed(m, 'atk');
+      addLog('【虚空净化】' + entLabel(m) + ' 编织出虚空蛛网，剥离了全场的防御！', 'hl');
+      foes.forEach(t => {
+        if (!t.alive) return;
+        let stripped = false;
+        if (t.st.dust > 0) { t.st.dust = 0; stripped = true; }
+        if (t.shield > 0) { t.shield = 0; stripped = true; }
+        if (t.dodgeReady) { t.dodgeReady = false; stripped = true; }
+        if (t.st.white) { t.st.white = false; t.st.whiteBy = null; stripped = true; } // ★ 清白
+        if (stripped) addLog(entLabel(t) + ' 的【尘】/【护盾】/【蓄闪】/【白】被强制清空！', 'sys');
+      });
+      m.actions--;
+      if (G.phase !== 'play') return;
+      settleWin(); if (G.phase !== 'play') return;
+      later(() => monsterAct(m), 380); return;
+    }
+    // 后退拉扯
+    if (dist <= 2 && !moveLocked(m)) {
+      const dx = Math.sign(m.pos.x - target.pos.x);
+      const dy = Math.sign(m.pos.y - target.pos.y);
+      const nx = m.pos.x + (dx || (Math.random() < 0.5 ? 1 : -1));
+      const ny = m.pos.y + (dy || (Math.random() < 0.5 ? 1 : -1));
+      if (canStep(m.room, nx, ny)) {
+        m.pos = { x: nx, y: ny };
+        m.actions--;
+        addLog(entLabel(m) + ' 向后退避，拉开距离。', 'sys');
+        later(() => monsterAct(m), 380); return;
+      }
+    }
+    finishMonsterTurn(m); return;
+  }
+
   // ★ 渊火咒术师 AI
   if (m.type === 'warlock'){
     // 技能：咒火洗礼
@@ -5259,7 +5309,7 @@ function monsterAct(m){
       markActed(m, 'atk');
       addLog('【咒火洗礼】' + entLabel(m) + ' 释放出幽蓝色的火焰！', 'hl');
       foes.forEach(t => {
-        if (!t.alive) return;
+        if (!t.alive || t.st.white) return; // ★ 白免疫
         dealDamage(t, 4, {trueDmg: true, tag: '咒火'});
         if (t.alive){
           t.st.blue = true;
@@ -5287,7 +5337,7 @@ function monsterAct(m){
   }
 
   // 末环之影【深渊处决】（第 3 层起解锁）
-  if (isHighFloor && m.skill === 'blackhole' && target.hp <= target.maxHp * 0.3 && !target.isMonster && !target.isSummon && dist <= rng) {
+  if (isHighFloor && m.skill === 'blackhole' && target.hp <= target.maxHp * 0.3 && !target.isMonster && !target.isSummon && !target.st.white && dist <= rng) { // ★ 白免疫
     addLog('【深渊处决】' + entLabel(m) + ' 撕裂了空间，直接抹杀了残血的 ' + entLabel(target) + '！', 'kill');
     target.hp = 0;
     killEnt(target, m);
@@ -5303,7 +5353,7 @@ function monsterAct(m){
     m.skillCd = 3;
     addLog('【引力黑洞】' + entLabel(m) + ' 扭曲了空间，将所有敌人拉到身边！', 'hl');
     foes.forEach(t => {
-      if (!t.alive) return;
+      if (!t.alive || t.st.white) return; // ★ 白免疫
       let bestPos = null;
       for(let dx=-1; dx<=1; dx++){
         for(let dy=-1; dy<=1; dy++){
@@ -5324,6 +5374,11 @@ function monsterAct(m){
 
   // 兽人【碎裂重击】（第 3 层起解锁）
   if (isHighFloor && m.skill === 'rage' && m.skillCd <= 0 && dist <= rng) {
+    if (target.st.white) {
+      addLog('【碎裂重击】' + entLabel(m) + ' 想要砸击 ' + entLabel(target) + '，却被【白】阻挡了！', 'sys');
+      m.skillCd = 3;
+      finishMonsterTurn(m); return; // ★ 白免疫
+    }
     m.skillCd = 3;
     markActed(m, 'atk');
     addLog('【碎裂重击】' + entLabel(m) + ' 挥舞巨斧砸向 ' + entLabel(target) + '！', 'hl');
@@ -5358,6 +5413,11 @@ function monsterAct(m){
 
   // 弓手【穿透箭】（全层生效）
   if (m.skill === 'pierce' && m.skillCd <= 0 && dist <= rng) {
+    if (target.st.white) {
+      addLog('【破魔穿透箭】' + entLabel(m) + ' 试图射击 ' + entLabel(target) + '，却被【白】阻挡了！', 'sys');
+      m.skillCd = 2;
+      finishMonsterTurn(m); return; // ★ 白免疫
+    }
     m.skillCd = 2;
     markActed(m, 'atk');
     addLog('【破魔穿透箭】' + entLabel(m) + ' 射出一发无视防御的箭矢 → ' + entLabel(target), 'hl');
@@ -6076,11 +6136,12 @@ const MONSTER_DATA = {
     { name:'兽人', icon:'👹', hp:'28', atk:'6', def:'2', rng:'1', act:'2', desc:'<b>【狂怒】</b>半血时清空自身负面，DEF 降为 0，ATK 大幅提升。<br><b>【碎裂重击】</b>（第 3 层起）1.5 倍伤害，永久摧毁目标一件护甲或武器；目标空手时改为 10 点真实伤害。' },
     { name:'渊火咒术师', icon:'🔮', hp:'22', atk:'5', def:'2', rng:'3', act:'1', desc:'<b>【咒火洗礼】</b>每 2 回合，对同房间所有玩家造成 4 点真实伤害并施加【蓝】。<br><b>【秽土转生】</b>受击时，50% 概率瞬移到同房间随机空格（每回合限 1 次）。' },
     { name:'噬盾吞噬者', icon:'🩸', hp:'38', atk:'6', def:'5', rng:'1', act:'1', desc:'<b>【吞噬护盾】</b>同房间内玩家获得护盾时，截胡一半（自身最多 20 盾）。<br><b>【重碾】</b>攻击命中时，若目标有【尘】，直接清零并附加等量真实伤害。' },
+    { name:'噬法幽魂', icon:'🕷️', hp:'15', atk:'0', def:'1', rng:'3', act:'1', desc:'<b>【虚空净化】</b>开局立刻释放（CD 3），对同房间所有玩家强制清空【尘】、【护盾】、【蓄闪】和【白】，不造成伤害。<br>极度恐惧近战，会不断后退。' },
   ],
   boss: [
-    { name:'地牢看守', icon:'👑', hp:'80', atk:'8', def:'3', rng:'1', act:'2', desc:'<b>【锁血】</b>2 段血（第 2 层起为 3 段）。锁血时清空负面，<span class="danger">免疫【黄】【蓝】【戒律】</span>。<br><b>【战吼】</b>进入 P2 时，全场玩家施加 2 回合【黄】，并召唤 1 只咒术师。' },
-    { name:'深渊领主', icon:'😈', hp:'120', atk:'10', def:'5', rng:'1', act:'2', desc:'<b>【锁血】</b>3 段血。锁血时清空负面，<span class="danger">免疫【黄】【蓝】【戒律】</span>。<br><b>【深渊诅咒】</b>所有攻击附带 1 层【撕裂】。<br><b>【召唤】</b>进入 P2 召唤 1 只咒术师，P3 召唤 1 只吞噬者。' },
-    { name:'末环之影', icon:'👾', hp:'180', atk:'12', def:'6', rng:'1', act:'3', desc:'<b>【锁血】</b>3 段血。锁血时清空负面，<span class="danger">免疫【黄】【蓝】【戒律】</span>。<br><b>【引力黑洞】</b>将所有玩家拉到身边并造成 5 点真实伤害。<br><b>【深渊处决】</b>对 HP ≤ 30% 的残血玩家直接斩杀。<br><b>【召唤】</b>P2 召唤 2 只吞噬者，P3 召唤 2 只咒术师。' },
+    { name:'地牢看守', icon:'👑', hp:'80', atk:'8', def:'3', rng:'1', act:'2', desc:'<b>【锁血】</b>2 段血（第 2 层起为 3 段）。锁血时不清理负面。<br><b>【深渊同化】</b>攻击被玩家大幅减伤（减免>50%）时，永久 ATK+2、DEF+1。<br><b>【战吼】</b>进入 P2 时，全场施加 2 回合【黄】并召唤精英。' },
+    { name:'深渊领主', icon:'😈', hp:'120', atk:'10', def:'5', rng:'1', act:'2', desc:'<b>【锁血】</b>3 段血。不清理负面，带有同化机制。<br><b>【深渊诅咒】</b>所有攻击附带 1 层【撕裂】。<br><b>【召唤】</b>进入 P2 召唤咒术师，P3 召唤吞噬者。' },
+    { name:'末环之影', icon:'👾', hp:'180', atk:'12', def:'6', rng:'1', act:'3', desc:'<b>【锁血】</b>3 段血。不清理负面，带有同化机制。<br><b>【引力黑洞】</b>将所有玩家拉到身边并造成 5 点真伤。<br><b>【深渊处决】</b>对 HP ≤ 30% 的残血玩家直接斩杀。<br><b>【召唤】</b>P2 召唤 2 吞噬者，P3 召唤 2 咒术师。' },
   ]
 };
 
