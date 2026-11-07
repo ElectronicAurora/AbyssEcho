@@ -433,7 +433,7 @@ input[type=number],input[type=text]{
         <div class="rsec">精英怪</div>
         <p>每层保底 1 个精英房：第 1 层为兽人 / 渊火咒术师，第 2 层起三者混出。<br>
            👹 <b>兽人</b>：【狂怒】半血清负面、DEF 归零、ATK 大幅提升；【碎裂重击】1.5 倍伤害并摧毁装备。<br>
-           🔮 <b>渊火咒术师</b>：射程 3。【咒火洗礼】对全场敌人各 4 点真实伤害并附加【蓝】；被贴脸会后跳 1 格；受击时 50% 概率【土移转生】瞬移（每回合限 1 次）。<br>
+           🔮 <b>渊火咒术师</b>：射程 3。【咒火洗礼】对全场敌人各 4 点真实伤害并附加【蓝】（伤害可闪避，但【蓝】只要目标存活就必定附着）；被贴脸会后跳 1 格；受击时 50% 概率【秽土转生】瞬移（每回合限 1 次）。<br>
            🩸 <b>噬盾吞噬者</b>：同房间时【噬盾】截走沧溟护盾的一半（自身护盾上限 20）；普攻命中会【重碾】目标全部【尘】层，转成等量真实伤害。</p>
         <div class="rsec">首领召唤</div>
         <p>首领每进入新阶段都会撕裂空间召唤精英（召唤物不掉刻印）：看守召 1 只咒术师；深渊领主召 1 只咒术师 / 1 只吞噬者；末环之影召 2 只吞噬者 / 2 只咒术师。无尽模式每 3 层额外多召 1 只。</p>
@@ -1911,7 +1911,7 @@ function applyHitEffect(tgt, effect, sealId, byI){
   if (effect === 'red'){ addTear(tgt, 1, by == null ? null : G.players[by]); addLog(entLabel(tgt) + ' 受到【红】：【撕裂】+1（当前 ' + tgt.st.tear + ' 层）'); }
   else if (effect === 'blue'){ tgt.st.blue = true; addLog(entLabel(tgt) + ' 受到【蓝】：下次受击前无法攻击'); }
   else if (effect === 'yellow'){ tgt.st.yellow = 3; addLog(entLabel(tgt) + ' 受到【黄】：使用药水前无法移动（最多 3 回合）'); }
-  else if (effect === 'white'){ tgt.st.white = true; tgt.st.whiteBy = by; addLog(entLabel(tgt) + ' 受到【白】：无法被单体指向性技能选中'); }
+  else if (effect === 'white'){ tgt.st.white = true; tgt.st.whiteBy = by; addLog(entLabel(tgt) + ' 受到【白】：无法被技能选中'); }
   else if (effect === 'grey'){ applyHitGrey(tgt); }
   else if (effect === 'black'){
     if (!sealId) return;
@@ -2013,7 +2013,7 @@ function pickable(list, filt){
 function rejectIfUnpickable(e, what){
   if (!e) return true;
   if (!skillSelectable(e)){
-    addLog(entLabel(e) + ' 处于【白】的状态，无法被' + (what || '单体技能') + '选中。', 'sys');
+    addLog(entLabel(e) + ' 处于【白】，无法被技能选中' + (what ? '（' + what + '）' : '') + '。', 'sys');
     return true;
   }
   return false;
@@ -2236,13 +2236,13 @@ function attackResolve(src, tgt, opt){
     }
   }
 
-  // ★ 渊火咒术师受击闪避（土移转生，每回合最多一次）
+  // ★ 渊火咒术师受击闪避（秽土转生，每回合最多一次）
   if (tgt.type === 'warlock' && tgt.alive && !tgt.dodgedThisRound && entDist(src, tgt) > 0){
     if (Math.random() < 0.5){
       tgt.dodgedThisRound = true;
       const spot = nearestFreeTile({ room: tgt.room, pos: tgt.pos });
       tgt.pos = spot;
-      addLog('【土移转生】' + entLabel(tgt) + ' 化作黑雾，瞬移到了新的位置！', 'hl');
+      addLog('【秽土转生】' + entLabel(tgt) + ' 化作黑雾，瞬移到了新的位置！', 'hl');
     }
   }
 
@@ -3335,7 +3335,7 @@ const HITFX = {
   red:   {name:'红', desc:'【撕裂】+1 层'},
   blue:  {name:'蓝', desc:'下次受击前无法攻击'},
   yellow:{name:'黄', desc:'使用药水前无法移动（最多 3 回合）'},
-  white: {name:'白', desc:'无法被单体指向性技能选中'},
+  white: {name:'白', desc:'无法被技能选中'},
   black: {name:'黑', desc:'指定一项基础刻印永久失效'},
   grey:  {name:'灰', desc:'不上状态 · 命中即生效：解除目标一个已有状态'},
 };
@@ -3387,7 +3387,7 @@ function paintClearCandidates(t){
   const out = [], s = t && t.st;
   if (!s) return out;
   const push = (key, label, sub, clear) => out.push({key:key, label:label, sub:sub, clear:clear});
-  if (s.white) push('white', '【白】', '无法被单体指向性技能选中',
+  if (s.white) push('white', '【白】', '无法被技能选中',
     () => { s.white = false; s.whiteBy = null; });
   if (s.blackSeals && s.blackSeals.length){
     s.blackSeals.forEach(x => push('black:' + x.id, '【黑】' + sealDisplayName(x.id),
@@ -5271,7 +5271,7 @@ function monsterStartTurn(m){
   m.movedThisTurn = false;
   if (m.skillCd > 0) m.skillCd--;
   m.actedBans = [];
-  m.dodgedThisRound = false;      // ★ 渊火咒术师·土移转生：每回合只触发一次
+  m.dodgedThisRound = false;      // ★ 渊火咒术师·秽土转生：每回合只触发一次
   m.syncedThisTurn = false;       // ★ 重置【深渊同化】
   hideChoice();
   render();
@@ -5279,7 +5279,9 @@ function monsterStartTurn(m){
     nextPlayer(); return;
   }
   render();
-  later(() => monsterAct(m), 380);
+  later(() => {
+    if (G && G.phase === 'play' && cur() === m) monsterAct(m);
+  }, 380);
 }
 
 function chooseMonsterTarget(m, foes){
@@ -5322,6 +5324,10 @@ function finishMonsterTurn(m){
 
 function monsterAct(m){
   if (!m || !m.alive || G.phase !== 'play') return;
+
+  // ★ 关键修复：确保当前行动者真的是它，防止脱离回合队列的过期回调强行插入行动
+  if (cur() !== m) return;
+
   if (m.resting){
     m.resting = false;
     addLog(entLabel(m) + ' 正在休息，本回合无法行动。');
@@ -5398,10 +5404,19 @@ function monsterAct(m){
       addLog('【咒火洗礼】' + entLabel(m) + ' 释放出幽蓝色的火焰！', 'hl');
       foes.forEach(t => {
         if (!t.alive || t.st.white) return; // ★ 白免疫
-        dealDamage(t, 4, {trueDmg: true, tag: '咒火'});
+
+        const ev = {};
+        // 伤害依然可以闪避
+        dealDamage(t, 4, {trueDmg: true, tag: '咒火', dodgeable: true, srcEnt: m, _ev: ev});
+
+        // ★ 核心修改：只要目标还活着，无论伤害是否被闪避，强制挂上【蓝】
         if (t.alive){
           t.st.blue = true;
-          addLog(entLabel(t) + ' 受到【蓝】：下次受击前无法攻击。', 'sys');
+          if (ev.evaded) {
+            addLog(entLabel(t) + ' 闪避了咒火伤害，但依然被余烬沾染，受到【蓝】！', 'hl');
+          } else {
+            addLog(entLabel(t) + ' 受到【蓝】：下次受击前无法攻击。', 'sys');
+          }
         }
       });
       m.actions--;
@@ -5426,10 +5441,17 @@ function monsterAct(m){
 
   // 末环之影【深渊处决】（第 3 层起解锁）
   if (isHighFloor && m.skill === 'blackhole' && target.hp <= target.maxHp * 0.3 && !target.isMonster && !target.isSummon && !target.st.white && dist <= rng) { // ★ 白免疫
-    addLog('【深渊处决】' + entLabel(m) + ' 撕裂了空间，直接抹杀了残血的 ' + entLabel(target) + '！', 'kill');
-    target.hp = 0;
-    killEnt(target, m);
-    settleWin();
+    // ★ 加上闪避判定
+    const gathered = !dodgeSealed(target) && !!target.dodgeReady;
+    if (resolveDodge(target)){
+      onDodgeEvade(target, entLabel(m), gathered);
+      addLog('【深渊处决】' + entLabel(m) + ' 的处决被 ' + entLabel(target) + ' 惊险闪避！', 'hl');
+    } else {
+      addLog('【深渊处决】' + entLabel(m) + ' 撕裂了空间，直接抹杀了残血的 ' + entLabel(target) + '！', 'kill');
+      target.hp = 0;
+      killEnt(target, m);
+      settleWin();
+    }
     m.actions--;
     if (G.phase !== 'play') return;
     later(() => monsterAct(m), 380);
@@ -5470,30 +5492,35 @@ function monsterAct(m){
     m.skillCd = 3;
     markActed(m, 'atk');
     addLog('【碎裂重击】' + entLabel(m) + ' 挥舞巨斧砸向 ' + entLabel(target) + '！', 'hl');
-    dealDamage(target, Math.floor(m.atk * 1.5), {trueDmg: false, tag: '碎裂重击'});
+    const ev = {};
+    dealDamage(target, Math.floor(m.atk * 1.5), {trueDmg: false, tag: '碎裂重击', dodgeable: true, srcEnt: m, _ev: ev});
 
-    const bag = target.bag || [];
-    const armors = bag.filter(it => it.id === 'armor');
-    const weapons = bag.filter(it => ITEMS[it.id] && (ITEMS[it.id].type === 'weapon' || ITEMS[it.id].yiqi));
+    if (!ev.evaded){ // ★ 如果没有闪避，才算装备摧毁
+      const bag = target.bag || [];
+      const armors = bag.filter(it => it.id === 'armor');
+      const weapons = bag.filter(it => ITEMS[it.id] && (ITEMS[it.id].type === 'weapon' || ITEMS[it.id].yiqi));
 
-    if (armors.length > 0) {
-      removeUid(target, armors[0].uid);
-      addLog('💥 ' + entLabel(target) + ' 的【护甲】被击碎了！', 'kill');
-    } else if (weapons.length > 0) {
-      removeUid(target, weapons[0].uid);
-      equipAuto(target);
-      addLog('💥 ' + entLabel(target) + ' 的【' + ITEMS[weapons[0].id].name + '】被击碎了！', 'kill');
-    } else {
-      // ★ 如果没装备（例如召唤物、空手玩家）
-      if (target.isSummon) {
-        target.maxHp = Math.max(1, target.maxHp - 5);
-        target.hp = Math.min(target.hp, target.maxHp);
-        addLog('💥 ' + entLabel(target) + ' 的躯体被砸碎，最大生命值永久 -5！', 'kill');
+      if (armors.length > 0) {
+        removeUid(target, armors[0].uid);
+        addLog('💥 ' + entLabel(target) + ' 的【护甲】被击碎了！', 'kill');
+      } else if (weapons.length > 0) {
+        removeUid(target, weapons[0].uid);
+        equipAuto(target);
+        addLog('💥 ' + entLabel(target) + ' 的【' + ITEMS[weapons[0].id].name + '】被击碎了！', 'kill');
       } else {
-        // ★ 修复：空手/无甲玩家不再永久扣 DEF，改为造成 10 点真实伤害（破甲撕裂）
-        addLog('💥 ' + entLabel(target) + ' 毫无防备，被重击打出了内伤！', 'kill');
-        dealDamage(target, 10, {trueDmg: true, tag: '碎裂重击'});
+        // ★ 如果没装备（例如召唤物、空手玩家）
+        if (target.isSummon) {
+          target.maxHp = Math.max(1, target.maxHp - 5);
+          target.hp = Math.min(target.hp, target.maxHp);
+          addLog('💥 ' + entLabel(target) + ' 的躯体被砸碎，最大生命值永久 -5！', 'kill');
+        } else {
+          // ★ 修复：空手/无甲玩家不再永久扣 DEF，改为造成 10 点真实伤害（破甲撕裂）
+          addLog('💥 ' + entLabel(target) + ' 毫无防备，被重击打出了内伤！', 'kill');
+          dealDamage(target, 10, {trueDmg: true, tag: '碎裂重击', noReflect: true});
+        }
       }
+    } else {
+      addLog('【碎裂重击】' + entLabel(target) + ' 一闪，装备安然无恙。', 'sys');
     }
     m.actions--;
     if (G.phase !== 'play') return; settleWin(); if (G.phase !== 'play') return; later(() => monsterAct(m), 380); return;
@@ -6222,7 +6249,7 @@ const MONSTER_DATA = {
   ],
   elite: [
     { name:'兽人', icon:'👹', hp:'28', atk:'6', def:'2', rng:'1', act:'2', desc:'<b>【狂怒】</b>半血时清空自身负面，DEF 降为 0，ATK 大幅提升。<br><b>【碎裂重击】</b>（第 3 层起）1.5 倍伤害，永久摧毁目标一件护甲或武器；目标空手时改为 10 点真实伤害。' },
-    { name:'渊火咒术师', icon:'🔮', hp:'22', atk:'5', def:'2', rng:'3', act:'1', desc:'<b>【咒火洗礼】</b>每 2 回合，对同房间所有玩家造成 4 点真实伤害并施加【蓝】。<br><b>【秽土转生】</b>受击时，50% 概率瞬移到同房间随机空格（每回合限 1 次）。' },
+    { name:'渊火咒术师', icon:'🔮', hp:'22', atk:'5', def:'2', rng:'3', act:'1', desc:'<b>【咒火洗礼】</b>每 2 回合，对同房间所有玩家造成 4 点真实伤害并施加【蓝】。伤害可被【闪避】，但【蓝】是余烬附着——只要目标存活就必定生效。<br><b>【秽土转生】</b>受击时，50% 概率瞬移到同房间随机空格（每回合限 1 次）。' },
     { name:'噬盾吞噬者', icon:'🩸', hp:'38', atk:'6', def:'5', rng:'1', act:'1', desc:'<b>【吞噬护盾】</b>同房间内玩家获得护盾时，截胡一半（自身最多 20 盾）。<br><b>【重碾】</b>攻击命中时，若目标有【尘】，直接清零并附加等量真实伤害。<br><b>【荆棘反噬】</b>单次受到 ≥15 点伤害时，把超出部分的 50% 反弹为真实伤害（单次最多 8 点）。' },
     { name:'噬法幽魂', icon:'🕷️', hp:'15', atk:'0', def:'1', rng:'3', act:'1', desc:'<b>【虚空净化】</b>开局立刻释放（CD 3），对同房间所有玩家强制清空【尘】、【护盾】、【蓄闪】和【白】，不造成伤害。<br>极度恐惧近战，会不断后退。' },
   ],
