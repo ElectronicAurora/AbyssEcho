@@ -121,6 +121,12 @@ body.choosing .abtn:hover{background:rgba(255,255,255,.05);border-color:var(--li
 #sumCtl .ctitle{color:#c4b5fd;text-transform:none;letter-spacing:0;font-size:12px}
 #sumCtl .opt{border-color:rgba(167,139,250,.4)}
 #sumCtl .opt:hover{background:rgba(167,139,250,.18);border-color:rgba(167,139,250,.8)}
+/* ★ 炮台瞄准状态：条与按钮换成粉红配色，和召唤物的紫色区分开 */
+#sumCtl.aim{border-color:rgba(255,61,154,.45);
+  background:linear-gradient(180deg,rgba(255,61,154,.14),rgba(255,61,154,.05))}
+#sumCtl.aim .ctitle{color:#ff9ecb}
+#sumCtl.aim .opt{border-color:rgba(255,61,154,.4)}
+#sumCtl.aim .opt:hover{background:rgba(255,61,154,.18);border-color:rgba(255,61,154,.8)}
 @keyframes fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 .ctitle{font-size:11.5px;color:var(--dim);letter-spacing:.1em;margin-bottom:7px;text-transform:uppercase}
 .opts{display:flex;flex-wrap:wrap;gap:7px}
@@ -446,9 +452,12 @@ input[type=number],input[type=text]{
         <p>每层保底 1 个精英房：第 1 层为兽人 / 渊火咒术师，第 2 层起三者混出。<br>
            👹 <b>兽人</b>：【狂怒】半血清负面、DEF 归零、ATK 大幅提升；【碎裂重击】1.5 倍伤害并摧毁装备。<br>
            🔮 <b>渊火咒术师</b>：射程 3。【咒火洗礼】对全场敌人各 4 点真实伤害并附加【蓝】（伤害可闪避，但【蓝】只要目标存活就必定附着）；被贴脸会后跳 1 格；受击时 50% 概率【秽土转生】瞬移（每回合限 1 次）。<br>
-           🩸 <b>噬盾吞噬者</b>：同房间时【噬盾】截走沧溟护盾的一半（自身护盾上限 20）；普攻命中会【重碾】目标全部【尘】层，转成等量真实伤害。</p>
+           🩸 <b>噬盾吞噬者</b>：同房间时【噬盾】截走沧溟护盾的一半（自身护盾上限 20）；普攻命中会【重碾】目标全部【尘】层，转成等量真实伤害。<br>
+           🕷️ <b>噬法幽魂</b>：射程 3。【虚空净化】强制清空全场【尘】/【护盾】/【蓄闪】/【白】；恐惧近战，进入 2 格内就后撤。<br>
+           🐛 <b>巢穴爬虫</b>：万母之巢孵化的杂兵，死亡时【自爆】对同房间其他单位造成 3 点真实伤害，会连锁引爆同伴。</p>
         <div class="rsec">首领召唤</div>
         <p>首领每进入新阶段都会撕裂空间召唤精英（召唤物不掉刻印）：看守召 1 只咒术师；深渊领主召 1 只咒术师 / 1 只吞噬者；末环之影召 2 只吞噬者 / 2 只咒术师。无尽模式每 3 层额外多召 1 只。</p>
+        <p><b>万母之巢</b>与<b>千面之眼</b>不召唤精英：前者锁血时【万物归巢】吞掉场上所有召唤物与爬虫（每吞 1 只永久 ATK+1），后者锁血时【千手之缚】给全场挂【黄】并按存活人数凝出护盾。</p>
       </div>
       <div class="rpane" data-pane="faq">
         <details class="faq"><summary>为什么我走不了？</summary><p>检查是否：① 行动点用完了（每回合 2 点）；② 被戒律「禁止移动」；③ 中了【黄】（喝药水解）；④ 被 ⑨b 撕裂把 DEF 压到负数（等一回合 / 用【灰】解）。</p></details>
@@ -561,6 +570,9 @@ const MONSTERS = {
   warlock:  { name:'渊火咒术师', icon:'🔮', hp:22, atk:5, def:2, rng:3, actions:1, aim:'lowest',  tier:'elite', skill:'curse_fire', cd:2 },
   devourer: { name:'噬盾吞噬者', icon:'🩸', hp:38, atk:6, def:5, rng:1, actions:1, aim:'nearest', tier:'elite', skill:'devour', cd:0 },
   weaver:   { name:'噬法幽魂', icon:'🕷️', hp:15, atk:0, def:1, rng:3, actions:1, aim:'nearest', tier:'elite', skill:'strip',  cd:0 },
+  boss_4: { name:'万母之巢', icon:'🦋', hp:180, atk:12, def:6, rng:1, actions:2, aim:'lowest',  tier:'boss', skill:'broodmother',   cd:3 },
+  boss_5: { name:'千面之眼', icon:'👁', hp:150, atk:15, def:8, rng:3, actions:2, aim:'nearest', tier:'boss', skill:'thousand_eyes', cd:2 },
+  spawnling: { name:'巢穴爬虫', icon:'🐛', hp:15, atk:4, def:0, rng:1, actions:1, aim:'nearest', tier:'normal', skill:'explode' },
 };
 
 function doorTiles(room){
@@ -829,9 +841,13 @@ function generateDungeon(floor){
       if (floor === 2) {
         bossType = 'boss_2';
       } else if (floor >= 3) {
-        // 第 3 层固定末环之影，第 4 层起三个 BOSS 轮流
-        const cycle = (floor - 3) % 3;
-        bossType = cycle === 0 ? 'boss_3' : (cycle === 1 ? 'boss_1' : 'boss_2');
+        // 第 3 层固定末环之影，第 4 层起 5 个 BOSS 轮换
+        const cycle = (floor - 3) % 5;
+        if (cycle === 0) bossType = 'boss_3';
+        else if (cycle === 1) bossType = 'boss_1';
+        else if (cycle === 2) bossType = 'boss_2';
+        else if (cycle === 3) bossType = 'boss_4';
+        else bossType = 'boss_5';
       }
       r.monsters.push({ type: bossType, pos: {x: Math.floor(r.w/2), y: Math.floor(r.h/2)} });
       const guardType = floor === 1 ? 'slime' : 'archer';
@@ -983,6 +999,10 @@ function spawnMonster(type, roomId, pos, summonedByBoss){
       m.rng += 1;                // 深渊领主射程增加
     } else if (type === 'boss_3') {
       m.skillCd = Math.max(1, 3 - endlessCycle); // 末环之影黑洞 CD 缩短
+    } else if (type === 'boss_4') {
+      m.def += endlessCycle * 1;      // 万母之巢：巢壁越来越硬
+    } else if (type === 'boss_5') {
+      m.rng += endlessCycle;          // 千面之眼：视线越铺越远
     }
   }
   // ★ 荆棘反噬：只对单段高伤生效；BOSS 无封顶，精英有 cap
@@ -991,6 +1011,8 @@ function spawnMonster(type, roomId, pos, summonedByBoss){
       boss_1: { threshold: 30, ratio: 0.5 },   // 无 cap
       boss_2: { threshold: 32, ratio: 0.6 },
       boss_3: { threshold: 35, ratio: 0.7 },
+      boss_4: { threshold: 34, ratio: 0.6 },
+      boss_5: { threshold: 35, ratio: 0.7 },
     };
     if (THORNS[type]) m.thorns = { ...THORNS[type] };
   }
@@ -1409,6 +1431,7 @@ function newGame(cfg){
   const mode = cfg.mode || 'solo';
   ITEM_UID = 1; MONSTER_UID = 1;
   if (typeof exitSummonCtrl === 'function') exitSummonCtrl();  // 清掉上一局残留的召唤物操控条
+  if (typeof exitMachineAim === 'function') exitMachineAim();  // 清掉上一局残留的炮台瞄准条
   G = {
     mode: mode,
     n: cfg.n,
@@ -1463,6 +1486,13 @@ function newGame(cfg){
    派生属性
    ============================================================ */
 function getDef(p){
+  if (!p) return 0;
+  // ★ 千面之眼【弱点洞悉】：被破防期间 DEF 强制为 0
+  //   有个人回合序号的（玩家）持续到其下个回合结束；没有的（召唤物）按大轮判定
+  if (G){
+    if (p.defBrokenUntil != null && (p.turnSeq || 0) <= p.defBrokenUntil) return 0;
+    if (p.defBrokenRound != null && p.defBrokenRound === G.round) return 0;
+  }
   let v;
   if (p && p.isSummon){
     v = summonStats(p).def;
@@ -2094,6 +2124,34 @@ function onBossLock(t, floor){
     });
   }
 
+  // ★ 万母之巢锁血：【万物归巢】
+  if (t.type === 'boss_4'){
+    addLog('【万物归巢】' + t.name + ' 发出恐怖的吸力，场上的召唤物被瞬间吞噬！', 'kill');
+    let eaten = 0;
+    (G.summons || []).forEach(s => {
+      if (s.alive && s.room === t.room){ s.alive = false; eaten++; }
+    });
+    G.monsters.filter(x => x.alive && x.type === 'spawnling' && x.room === t.room).forEach(x => {
+      x.alive = false; eaten++;
+    });
+    if (eaten > 0){
+      t.atk += eaten;
+      addLog(t.name + ' 吞噬了 ' + eaten + ' 只生物，永久获得 +' + eaten + ' ATK！', 'hl');
+    }
+    return;   // 本分支结束，不再走通用召唤
+  }
+
+  // ★ 千面之眼锁血：【千手之缚】
+  if (t.type === 'boss_5'){
+    addLog('【千手之缚】' + t.name + ' 的千只手锁定了全场，施加【黄】并凝出护盾！', 'hl');
+    const aliveCount = G.players.filter(p => p.alive).length;
+    t.shield = (t.shield || 0) + aliveCount * 10;
+    allEnts().forEach(e => {
+      if (!e.isMonster && e.alive && !e.st.white) e.st.yellow = Math.max(e.st.yellow, 1);
+    });
+    return;   // 本分支结束，不再走通用召唤
+  }
+
   // ★ 所有 BOSS 阶段锁血召唤精英
   const dungeonFloor = G.dungeon.floor;
   let summonCount = 0;
@@ -2128,6 +2186,18 @@ function onBossLock(t, floor){
    ============================================================ */
 function dealDamage(tgt, raw, opt){
   opt = opt || {};
+  // ★ 千面之眼【千眼凝视】：每回合最多承受 3 + 存活人数×2 次伤害判定
+  if (tgt && tgt.type === 'boss_5'){
+    if (tgt.hitsThisTurn == null) tgt.hitsThisTurn = 0;
+    const eyeLimit = 3 + G.players.filter(p => p.alive).length * 2;
+    if (tgt.hitsThisTurn >= eyeLimit){
+      const ep = entityPixel(tgt);
+      floatText(ep.x, ep.y - 28, '免疫', '#8494b8');
+      addLog('【千眼凝视】' + entLabel(tgt) + ' 本回合受击次数已达上限（' + eyeLimit + ' 次），免疫了本次伤害！', 'sys');
+      if (opt._ev){ opt._ev.evaded = true; opt._ev.eyeBlocked = true; }   // 伪装成闪避，让后续攻击流程停下
+      return 0;
+    }
+  }
   let dmg = Math.max(0, Math.floor(raw));
   const before = tgt.hp;
   if (opt.dodgeable && opt.srcEnt){
@@ -2164,6 +2234,8 @@ function dealDamage(tgt, raw, opt){
     sparks(pos.x, pos.y, '#ff3d9a', 14);
     addLog(entLabel(tgt) + ' 受到 ' + realDmg + ' 点' + (opt.trueDmg ? '真实' : '') + '伤害' +
            (opt.tag ? '（' + opt.tag + '）' : '') + '，剩余 ' + tgt.hp + ' HP');
+    // ★ 千眼凝视：真正吃到伤害才算一次「受击」
+    if (tgt.type === 'boss_5') tgt.hitsThisTurn = (tgt.hitsThisTurn || 0) + 1;
   } else {
     floatText(pos.x, pos.y - 28, '免疫', '#8494b8');
   }
@@ -2238,7 +2310,8 @@ function attackResolve(src, tgt, opt){
     dmg = Math.max(1, dmg - 1);
   }
 
-  const dealt = dealDamage(tgt, dmg, {srcEnt:src, trueDmg: !!opt.trueDmg});
+  const ev0 = {};
+  const dealt = dealDamage(tgt, dmg, {srcEnt:src, trueDmg: !!opt.trueDmg, _ev: ev0});
 
   // ★ BOSS 的【深渊同化】：打不穿防御就变强
   if (src.isBoss && tgt.alive && !src.syncedThisTurn) {
@@ -2279,7 +2352,7 @@ function attackResolve(src, tgt, opt){
     addLog(entLabel(tgt) + ' 被突袭附加了 1 层【撕裂】！', 'hl');
   }
 
-  if (share && hasSeal(owner,'9') && dealt >= 0){
+  if (share && hasSeal(owner,'9') && dealt >= 0 && !ev0.eyeBlocked){
     addTear(tgt, 1, src);
     addLog(entLabel(tgt) + ' 获得 1 层【撕裂】（当前 ' + tgt.st.tear + ' 层）');
   }
@@ -2360,6 +2433,20 @@ function tickYellow(e){
 /* 击杀分发 */
 function killEnt(victim, killer, toVoid){
   if (victim.isMonster){
+    // ★ 巢穴爬虫：死亡自爆（_exploded 防止连锁中被反复触发）
+    if (victim.type === 'spawnling' && !victim._exploded){
+      victim._exploded = true;
+      addLog('【自爆】' + entLabel(victim) + ' 爆裂开来，喷射出腐蚀性酸液！', 'hl');
+      const tgts = allEnts().filter(t => t.alive && t !== victim && t.room === victim.room);
+      tgts.forEach(t => {
+        const ev = {};
+        dealDamage(t, 3, { trueDmg: true, tag: '自爆', dodgeable: true, srcEnt: victim, _ev: ev });
+        if (!ev.evaded && t.alive) t.hits = (t.hits || 0) + 1;
+      });
+      const vp = entityPixel(victim);
+      sparks(vp.x, vp.y, '#84cc16', 20);
+      ring(vp.x, vp.y, '#84cc16');
+    }
     // ★ 怪物掉落：金币 + 精英 30% 刻印 / BOSS 100% 遗器
     const pos = entityPixel(victim);
     let gold = 0;
@@ -3160,7 +3247,7 @@ function pickTarget(p, w, mode){
   showChoice(label, inR.map(t => {
     const isAlly = !isEnemyOf(p, t);
     return {
-      label: entLabel(t) + (isAlly ? '（队友）' : ''),
+      label: entLabel(t) + (isAlly ? (t.isSummon ? '（召唤物）' : '（队友）') : ''),
       sub: hpDisp(t) + '/' + t.maxHp + ' · DEF ' + getDef(t) + dustHint(t) +
            (t.st.blue ? ' · <span style="color:#38f0d8">受击解除【蓝】</span>' : '') +
            ' · 预计伤害 ' + estHit(Math.max(0, getAtk(p,w) - getDef(t)), t, p),
@@ -4132,26 +4219,36 @@ function summonActCore(s, owner, done){
     addLog(entLabel(s) + ' 跟随 ' + owner.name + '。');
     done(); return;
   }
-  const tgt = summonFindTarget(s);
-  if (!tgt){ addLog(entLabel(s) + ' 附近没有目标，待命。'); done(); return; }
-  if (entDist(s, tgt) <= summonRngOf(s) && !hasBan(s,'atk')){
-    if (s.st.blue){ addLog(entLabel(s) + ' 处于【蓝】，无法攻击。'); done(); return; }
-    const isPuppet = s.type === 10;
-    addLog(entLabel(s) + ' 攻击 ' + entLabel(tgt));
-    markActed(s, 'atk');
-    attackResolve(s, tgt, {trueDmg: isPuppet,
-                     effect: entHasSeal(s,'11') ? summonHitEffect(s) : null,
-                     blackSeal: s.hitSeal || null, greyKey: s.hitGreyKey || null});
-    done(); return;
-  }
-  if (!moveLocked(s)){
-    markActed(s, 'move');
-    summonStepToward(s, tgt);
-    addLog(entLabel(s) + ' 追击 ' + entLabel(tgt) + '。');
-  } else {
+  // ★ AI 自动执行：本回合 2 点行动点（人类操控由 runOneSummon 分流，不会走到这里）
+  let actionsLeft = 2;
+  const loop = () => {
+    if (actionsLeft <= 0 || !s.alive || s.resting){ done(); return; }
+    const tgt = summonFindTarget(s);
+    if (!tgt){ addLog(entLabel(s) + ' 附近没有目标，待命。'); done(); return; }
+    if (entDist(s, tgt) <= summonRngOf(s) && !hasBan(s,'atk')){
+      if (s.st.blue){ addLog(entLabel(s) + ' 处于【蓝】，无法攻击。'); done(); return; }
+      const isPuppet = s.type === 10;
+      addLog(entLabel(s) + ' 攻击 ' + entLabel(tgt));
+      markActed(s, 'atk');
+      attackResolve(s, tgt, {trueDmg: isPuppet,
+                       effect: entHasSeal(s,'11') ? summonHitEffect(s) : null,
+                       blackSeal: s.hitSeal || null, greyKey: s.hitGreyKey || null});
+      actionsLeft--;
+      loop();
+      return;
+    }
+    if (!moveLocked(s)){
+      markActed(s, 'move');
+      summonStepToward(s, tgt);
+      addLog(entLabel(s) + ' 追击 ' + entLabel(tgt) + '。');
+      actionsLeft--;
+      loop();
+      return;
+    }
     addLog(entLabel(s) + ' 无法移动。');
-  }
-  done();
+    done();
+  };
+  loop();
 }
 function runOneSummon(s, owner, done){
   if (!turnStartTick(s) || !s.alive){ done(); return; }
@@ -4161,7 +4258,7 @@ function runOneSummon(s, owner, done){
     // ★ 刻印 ⑩ 御灵：人类玩家手动操控（AI 与无御灵者一律自动索敌）
     if (!owner.isAI && owner.alive && hasSeal(owner, '10')){
       s.useSeal7 = false;
-      summonPanel(s, owner, done);
+      summonPanel(s, owner, 2, done); // ★ 传入 2 行动点
       return;
     }
     let useSeal7 = false;
@@ -4182,17 +4279,11 @@ function runOneSummon(s, owner, done){
 /* ============================================================
    ★ 召唤物手动操控（刻印 ⑩ 御灵）
    ============================================================ */
-function summonPanel(s, owner, done, forceList){
+function summonPanel(s, owner, actionsLeft, done, forceList){
   const T = SUMMON_TYPES[s.type];
-  // 休息硬直：这一回合本来就不能动，别给出能动的选项，直接结算掉
-  if (s.resting){
-    exitSummonCtrl();
-    showChoice('召唤物行动 · ' + s.name + '（HP ' + Math.max(0, s.hp) + '/' + s.maxHp + ' · 休息中）',
-      [{ label:'确认（本回合休息）', sub:'上一击命中后进入硬直，这一回合无法行动',
-         run: () => { consumeResting(s); done(); } }],
-      () => { consumeResting(s); done(); });
-    return;
-  }
+  // 行动点耗尽：直接收尾；休息硬直：交给 summonHumanGo 走 consumeResting（那里才会结算敕罚）
+  if (actionsLeft <= 0){ exitSummonCtrl(); done(); return; }
+  if (s.resting){ exitSummonCtrl(); summonHumanGo(s, owner, {act:'idle'}, 0, done); return; }
   if (hasBan(s, 'atk') && hasBan(s, 'move')){
     exitSummonCtrl();
     addLog(entLabel(s) + ' 被戒律完全限制，无法行动。', 'sys');
@@ -4200,70 +4291,76 @@ function summonPanel(s, owner, done, forceList){
     return;
   }
   // ★ 默认进入「点地图」操控模式；forceList 时退回按钮列表
-  if (!forceList && summonCtrlEnabled(s, owner)){ enterSummonCtrl(s, owner, done); return; }
+  if (!forceList && summonCtrlEnabled(s, owner)){ enterSummonCtrl(s, owner, actionsLeft, done); return; }
   exitSummonCtrl();
 
   const fxName = HITFX[s.hitEffect || 'red'].name;
   const title = '召唤物行动 · ' + s.name + '（HP ' + Math.max(0, s.hp) + '/' + s.maxHp +
-                ' · ATK ' + summonAtk(s) + ' · 射程 ' + rngTxt(summonRngOf(s)) + '）';
+                ' · ATK ' + summonAtk(s) + ' · 射程 ' + rngTxt(summonRngOf(s)) +
+                ' · 剩余 ' + actionsLeft + ' 行动点）';
   const opts = [];
-  opts.push({ label:'自动行动', sub:'按索敌逻辑执行（推荐）',
-    run: () => { summonHumanGo(s, owner, null, done); } });
+  opts.push({ label:'自动行动', sub:'按索敌逻辑执行剩余行动点',
+    run: () => { summonHumanGo(s, owner, null, actionsLeft, done); } });
 
   const rng = summonRngOf(s);
-  foesOfEnt(s).filter(t => t.alive && t.room === s.room && entDist(s, t) <= rng).forEach(t => opts.push({
-    label:'攻击 ' + entLabel(t),
-    sub: hpDisp(t) + ' · DEF ' + getDef(t) + dustHint(t) +
-         ' · 预计伤害 ' + estHit(Math.max(0, summonAtk(s) - getDef(t)), t, s),
-    run: () => { summonHumanGo(s, owner, {act:'atk', target:t}, done); }
-  }));
+  /* ★ 目标池包含队友与其它召唤物：可用于帮队友解【蓝】/【白】、补刀、触发受击效果 */
+  const atkRank = t => isEnemyOf(s, t) ? 0 : (t.isSummon ? 1 : 2);
+  allEnts()
+    .filter(t => t.alive && t !== s && t.room === s.room && entDist(s, t) <= rng)
+    .sort((a, b) => atkRank(a) - atkRank(b))
+    .forEach(t => opts.push({
+      label:'攻击 ' + entLabel(t) + (isEnemyOf(s, t) ? '' : '（友方）'),
+      sub: hpDisp(t) + ' · DEF ' + getDef(t) + dustHint(t) +
+           ' · 预计伤害 ' + estHit(Math.max(0, summonAtk(s) - getDef(t)), t, s),
+      run: () => { summonHumanGo(s, owner, {act:'atk', target:t}, actionsLeft, done); }
+    }));
 
   if (!moveLocked(s)){
     reachableTiles(s, 2).forEach(t => opts.push({
       label:'移动到 (' + t.x + ',' + t.y + ')',
-      sub:'本回合可走（最多 2 格）',
-      run: () => { summonHumanGo(s, owner, {act:'move', pos:t}, done); }
+      sub:'消耗 1 点行动点（最多 2 格）',
+      run: () => { summonHumanGo(s, owner, {act:'move', pos:t}, actionsLeft, done); }
     }));
   } else {
     opts.push({ label:'无法移动', sub: moveLockReason(s),
-      run: () => { summonHumanGo(s, owner, {act:'idle'}, done); } });
+      run: () => { summonHumanGo(s, owner, {act:'idle'}, actionsLeft, done); } });
   }
 
-  opts.push({ label:'待机', sub:'本回合不行动',
-    run: () => { summonHumanGo(s, owner, {act:'idle'}, done); } });
+  opts.push({ label:'待机 / 结束', sub:'放弃剩余行动点',
+    run: () => { summonHumanGo(s, owner, {act:'idle'}, actionsLeft, done); } });
 
   if (canSummonUseSeal7(s, owner)){
     opts.push({ label:'⚡ 蹑景' + (s.useSeal7 ? '（已选 ✓）' : ''),
       sub:'本回合行动后再行动 ' + summonSeal7Extra(owner) + ' 次',
-      run: () => { s.useSeal7 = !s.useSeal7; summonPanel(s, owner, done); } });
+      run: () => { s.useSeal7 = !s.useSeal7; summonPanel(s, owner, actionsLeft, done, true); } });
   }
   if (entHasSeal(s, '11')){
     opts.push({ label:'命中效果：' + fxName + '（点击更换）',
       sub: HITFX[s.hitEffect || 'red'].desc +
            (s.hitEffect === 'grey' ? ' · 命中时解：' + greyTargetHint(s) : ''),
-      run: () => pickSummonHitEffect(s, owner, done) });
+      run: () => pickSummonHitEffect(s, owner, actionsLeft, done, true) });
   }
-  showChoice(title, opts, () => summonHumanGo(s, owner, {act:'idle'}, done)); // 取消 = 待机，流程照常推进
+  showChoice(title, opts, () => summonHumanGo(s, owner, {act:'idle'}, actionsLeft, done)); // 取消 = 待机，流程照常推进
 }
 const GREY_KEY_NAME = {black:'【黑】', white:'【白】', blue:'【蓝】', yellow:'【黄】', tear:'【撕裂】'};
 function greyTargetHint(s){
   return s.hitGreyKey ? ('优先解除 ' + (GREY_KEY_NAME[s.hitGreyKey] || s.hitGreyKey))
                       : '自动挑最有利的一项';
 }
-function pickSummonHitEffect(s, owner, done){
+function pickSummonHitEffect(s, owner, actionsLeft, done, forceList){
   const cols = paintColorsOf(owner);
   showChoice('【' + s.name + '】命中后附加哪种效果？（' + (cols.length > 3 ? '六' : '三') + '选一）',
     cols.map(k => ({
       label: '【' + HITFX[k].name + '】',
       sub: HITFX[k].desc,
       run: () => {
-        if (k === 'grey'){ pickSummonGreyKey(s, owner, done); return; }
+        if (k === 'grey'){ pickSummonGreyKey(s, owner, actionsLeft, done, forceList); return; }
         s.hitEffect = k; s.hitGreyKey = null;
-        summonPanel(s, owner, done);      // 选完回到行动面板，不消耗行动
+        summonPanel(s, owner, actionsLeft, done, forceList);   // 选完回到行动面板，不消耗行动点
       }
-    })), () => summonPanel(s, owner, done));
+    })), () => summonPanel(s, owner, actionsLeft, done, forceList));
 }
-function pickSummonGreyKey(s, owner, done){
+function pickSummonGreyKey(s, owner, actionsLeft, done, forceList){
   const keys = [
     {k:null,      label:'自动挑（推荐）', sub:'命中时按「黑 > 白 > 蓝 > 黄 > 撕裂 > 尘 > 戒律 > 蓄闪」解最有利的一项'},
     {k:'black',   label:'优先解【黑】',   sub:'目标身上有【黑】就解它，否则自动降级'},
@@ -4274,10 +4371,10 @@ function pickSummonGreyKey(s, owner, done){
   ];
   showChoice('【灰】命中时优先解除哪一类效果？', keys.map(o => ({
     label: o.label, sub: o.sub,
-    run: () => { s.hitEffect = 'grey'; s.hitGreyKey = o.k; summonPanel(s, owner, done); }
-  })), () => pickSummonHitEffect(s, owner, done));
+    run: () => { s.hitEffect = 'grey'; s.hitGreyKey = o.k; summonPanel(s, owner, actionsLeft, done, forceList); }
+  })), () => pickSummonHitEffect(s, owner, actionsLeft, done, forceList));
 }
-function summonHumanGo(s, owner, choice, done){
+function summonHumanGo(s, owner, choice, actionsLeft, done){
   done = done || function(){};
   exitSummonCtrl();   // 一旦出手/待机，操控条立刻收起，避免地图点选残留
   const finish = () => {
@@ -4291,7 +4388,7 @@ function summonHumanGo(s, owner, choice, done){
       let left = n;
       const step = () => {
         if (left-- <= 0 || !s.alive){ done(); return; }
-        if (!owner.isAI && owner.alive && hasSeal(owner, '10')){ summonPanel(s, owner, step); return; }
+        if (!owner.isAI && owner.alive && hasSeal(owner, '10')){ summonPanel(s, owner, 2, step); return; }
         summonDoAction(s, owner, step);
       };
       step();
@@ -4300,12 +4397,52 @@ function summonHumanGo(s, owner, choice, done){
     done();
   };
 
-  if (consumeResting(s)){ done(); return; }
-  if (!choice){ summonDoAction(s, owner, finish); return; }   // 「自动行动」＝走常规索敌
+  // 中途进入硬直：本回合到此为止（已挂上的敕罚仍要结算）
+  if (consumeResting(s)){ finish(); return; }
+
+  if (!choice){
+    // 「自动行动」：按剩余行动点自动索敌，不再借用 summonActCore（那边固定 2 点，会多给）
+    let autoLeft = actionsLeft;
+    const runAuto = () => {
+      if (autoLeft <= 0 || !s.alive || s.resting){
+        if (s.resting) addLog(entLabel(s) + ' 陷入休息，结束行动。');
+        finish(); return;
+      }
+      const tgt = summonFindTarget(s);
+      if (!tgt){ addLog(entLabel(s) + ' 附近没有目标。'); finish(); return; }
+      if (entDist(s, tgt) <= summonRngOf(s) && !hasBan(s,'atk')){
+        if (s.st.blue){ addLog(entLabel(s) + ' 处于【蓝】，无法攻击。'); finish(); return; }
+        const isPuppet = s.type === 10;
+        addLog(entLabel(s) + ' 攻击 ' + entLabel(tgt));
+        markActed(s, 'atk');
+        attackResolve(s, tgt, {trueDmg: isPuppet,
+                         effect: entHasSeal(s,'11') ? summonHitEffect(s) : null,
+                         blackSeal: s.hitSeal || null, greyKey: s.hitGreyKey || null});
+        autoLeft--;
+        runAuto();
+        return;
+      }
+      if (!moveLocked(s)){
+        markActed(s, 'move');
+        summonStepToward(s, tgt);
+        addLog(entLabel(s) + ' 追击 ' + entLabel(tgt) + '。');
+        autoLeft--;
+        runAuto();
+        return;
+      }
+      finish();
+    };
+    runAuto();
+    return;
+  }
 
   if (choice.act === 'idle'){
     addLog(entLabel(s) + ' 原地待命。');
-  } else if (choice.act === 'move'){
+    finish();
+    return;
+  }
+
+  if (choice.act === 'move'){
     if (moveLocked(s)){
       addLog(entLabel(s) + ' 当前无法移动（' + moveLockReason(s) + '）。', 'sys');
     } else {
@@ -4313,8 +4450,14 @@ function summonHumanGo(s, owner, choice, done){
       s.pos = { x: choice.pos.x, y: choice.pos.y };
       s.movedThisTurn = true;
       addLog(entLabel(s) + ' 移动到 (' + s.pos.x + ',' + s.pos.y + ')。');
+      actionsLeft--;
     }
-  } else if (choice.act === 'atk'){
+    if (actionsLeft > 0 && !s.resting){ summonPanel(s, owner, actionsLeft, finish); }
+    else { finish(); }
+    return;
+  }
+
+  if (choice.act === 'atk'){
     if (s.st.blue){
       addLog(entLabel(s) + ' 处于【蓝】，无法攻击。', 'sys');
     } else {
@@ -4324,9 +4467,12 @@ function summonHumanGo(s, owner, choice, done){
       attackResolve(s, choice.target, {trueDmg: isPuppet,
         effect: entHasSeal(s, '11') ? summonHitEffect(s) : null,
         blackSeal: s.hitSeal || null, greyKey: s.hitGreyKey || null});
+      actionsLeft--;
     }
+    if (actionsLeft > 0 && !s.resting){ summonPanel(s, owner, actionsLeft, finish); }
+    else { finish(); }
+    return;
   }
-  finish();
 }
 function summonHitEffect(s){
   const cols = paintColorsOf(s);
@@ -4367,14 +4513,16 @@ function machineAutoFire(p, done){
   done = done || function(){};
   const list = machinesOf(p).filter(m => m.auto && m.ammo && m.room === G.dungeon.currentRoom);
   let idx = 0;
+  // ★ 已经轮到别人（玩家中途结束回合等）就不再继续连发，避免在别人的回合里开枪
+  const stillMine = () => cur() === p;
   const step = () => {
-    if (G.phase !== 'play' || settleWin()){ done(); return; }
+    if (G.phase !== 'play' || settleWin() || !stillMine()){ done(); return; }
     if (idx >= list.length){ done(); return; }
     const m = list[idx++];
     const n = (m.ammo === 'tnt') ? 1 : 2;
     let k = 0;
     const shoot = () => {
-      if (G.phase !== 'play' || settleWin()){ done(); return; }
+      if (G.phase !== 'play' || settleWin() || !stillMine()){ done(); return; }
       if (k++ >= n || !m.ammo){ step(); return; }
       fireMachine(m, shoot);
     };
@@ -4382,107 +4530,207 @@ function machineAutoFire(p, done){
   };
   step();
 }
+/* ============================================================
+   ★ 炮台专用攻击管线
+   —— 继承主人的被动刻印（残锋⑤ / 尘梦⑫b / 劫雷① / 裂帛⑨ / 点染⑪），
+      但独立结算；反伤不弹给主人（炮台是「物」，荆棘烧不到主人）
+   ============================================================ */
+function machineAttackResolve(owner, tgt, baseAtk, tag, opt){
+  opt = opt || {};
+  if (!tgt || !tgt.alive) return { evaded: true, dmg: 0 };
+
+  // 1. 攻击力：基础 + 残锋⑤ + 尘梦⑫b（不吃武器加成）；主人已阵亡则不再继承加成
+  const inherited = owner.alive ? (seal5Bonus(owner) + dustAtkBonus(owner)) : 0;
+  const atk = baseAtk + inherited;
+  const def = getDef(tgt);
+
+  // 2. 伤害计算
+  let dmg = Math.max(0, atk - def);
+  let crit = false, mult = 1;
+
+  // 3. 劫雷①暴击判定
+  const s1 = sealCount(owner, '1');
+  if (s1 > 0 && Math.random() < (s1 >= 2 ? 1 : 0.5)){
+    mult = randInt(2, 20);
+    dmg = Math.max(0, atk * mult - def);
+    crit = true;
+  }
+
+  // 4. 闪避判定（炮台不是「技能」，【白】挡不住，但【蓄闪】照样能躲）
+  const gathered = !dodgeSealed(tgt) && !!tgt.dodgeReady;
+  if (resolveDodge(tgt)){
+    onDodgeEvade(tgt, '炮台' + tag, gathered);
+    return { evaded: true, dmg: 0 };
+  }
+
+  // 5. 命中与伤害结算
+  tgt.hits = (tgt.hits || 0) + 1;
+  if (crit) addLog('【暴击 ×' + mult + '】' + entLabel(owner) + ' 的炮台打出暴击！', 'hl');
+
+  // ★ noReflect：荆棘反噬不会弹回主人身上
+  const ev = {};
+  const dealt = dealDamage(tgt, dmg, { srcEnt: owner, noReflect: true, tag: tag, _ev: ev });
+
+  // 6. 刻印 ⑨ 裂帛
+  if (hasSeal(owner, '9') && dealt >= 0 && !ev.eyeBlocked && tgt.alive){
+    addTear(tgt, 1, owner);
+    addLog('【裂帛】炮台命中，' + entLabel(tgt) + ' 获得 1 层【撕裂】（当前 ' + tgt.st.tear + ' 层）');
+  }
+
+  // 7. 刻印 ⑪ 点染（读取传入的颜色选择）
+  if (hasSeal(owner, '11') && opt.effect && tgt.alive){
+    const cols = paintColorsOf(owner);
+    if (cols.indexOf(opt.effect) >= 0){
+      if (opt.effect === 'grey') tgt.__hitGreyKey = opt.greyKey || null;
+      applyHitEffect(tgt, opt.effect, opt.blackSeal || null, owner.i);
+      tgt.__hitGreyKey = null;
+    }
+  }
+
+  return { evaded: false, dmg: dealt, crit: crit, mult: mult };
+}
+
+/* AI 代管炮台时的点染选色：有【红】就上红，否则不附加 */
+function machineAiEffect(owner){
+  if (!owner) return null;
+  return paintColorsOf(owner).indexOf('red') >= 0 ? 'red' : null;
+}
+
 function fireMachine(m, done){
   done = done || function(){};
   const owner = G.players[m.owner];
-  if (!m.ammo){ done(false); return false; }
+  if (!owner){ done(false); return false; }
+  if (!m.ammo){ addLog('【机械】炮台 #' + m.mid + ' 没有装填弹药，无法发射。'); done(false); return false; }
   const tagM = '炮台 #' + m.mid;
+  const skip = () => ({label:'⏭ 跳过本次发射', sub:'本次不发射，继续主要行动',
+    run:()=>{ addLog('【机械】' + tagM + ' 本次跳过发射。'); done(false); }});
 
+  /* ★ 发射 + 上色执行器：箭矢 / TNT 共用同一条命中结算 */
+  const doShoot = (targets, isTnt) => {
+    const tg = (targets || []).filter(e => e && e.alive);
+    const executeHit = (effect, sealId, greyKey) => {
+      if (!tg.length){ addLog('【机械】' + tagM + ' 没有可命中的目标。'); done(false); return; }
+      tg.forEach(e => machineAttackResolve(owner, e, isTnt ? 16 : 8, isTnt ? 'TNT' : '箭矢',
+        { effect: effect, blackSeal: sealId || null, greyKey: greyKey || null }));
+      settleWin();
+      done(true);
+    };
+
+    // 没有 ⑪ 点染，直接打
+    if (!hasSeal(owner, '11')){ executeHit(null); return; }
+
+    // AI 或阵亡者代管：自动选色
+    if (owner.isAI || !owner.alive){
+      const fx = isTnt ? 'red' : machineAiEffect(owner);   // TNT 范围攻击默认上红
+      executeHit(fx, null, null);
+      return;
+    }
+
+    // 人类玩家：弹选色面板
+    const cols = paintColorsOf(owner);
+    // TNT 是范围攻击，不支持【黑】/【灰】这种单点操作
+    const availCols = isTnt ? cols.filter(c => c !== 'black' && c !== 'grey') : cols;
+
+    const pickColor = () => {
+      const opts = availCols.map(k => ({
+        label: '【' + HITFX[k].name + '】',
+        sub: HITFX[k].desc,
+        run: () => {
+          if (k === 'black'){
+            const t = tg[0];
+            const cand = paintSealCandidates(t);
+            showChoice('【黑】封住 ' + entLabel(t) + ' 的哪一项？', cand.map(id => ({
+              label: sealDisplayName(id) + (rawSealsOf(t, id) > 0 ? '' : ' · 未持有'),
+              run: () => executeHit(k, id)
+            })).concat([{label:'⏭ 不附加', run:()=>executeHit(null)}]), pickColor);
+            return;
+          }
+          if (k === 'grey'){
+            const t = tg[0];
+            const cand = paintClearCandidates(t);
+            if (!cand.length){ addLog(entLabel(t) + ' 身上没有可解除的效果。'); executeHit(null); return; }
+            showChoice('【灰】解除 ' + entLabel(t) + ' 的哪个效果？', cand.map(c => ({
+              label: c.label,
+              sub: c.sub,
+              run: () => executeHit(k, null, c.key)
+            })).concat([{label:'⏭ 不附加', run:()=>executeHit(null)}]), pickColor);
+            return;
+          }
+          executeHit(k);
+        }
+      }));
+      opts.push({label:'⏭ 本次不附加', run:()=>executeHit(null)});
+      showChoice('炮台发射 · 命中附加哪种效果？（点染）', opts, () => executeHit(null));
+    };
+    pickColor();
+  };
+
+  /* ---------------- TNT：半径 2（5×5） ---------------- */
   if (m.ammo === 'tnt'){
-    const RADIUS = 2; // 半径 2（5x5 范围）
+    const RADIUS = 2;
     const fire = (cx, cy) => {
       const tgts = getEntitiesInBlast(m.room, cx, cy, RADIUS);
       const cp = roomTileXY(m.room, cx, cy);
       ring(cp.x, cp.y, '#ff3d9a');
       sparks(cp.x, cp.y, '#ff3d9a', 35);
       addLog('【机械】' + tagM + ' 发射 TNT：16 ATK · 范围 5x5 · 中心格(' + cx + ',' + cy + ')', 'hl');
-      tgts.forEach(e => {
-        const ev = {};
-        dealDamage(e, 16 - getDef(e), {srcEnt:owner, dodgeable:true, tag:'TNT', _ev:ev});
-        if (!ev.evaded) e.hits = (e.hits || 0) + 1;
-      });
-      settleWin();
-      done(true);
+      if (!tgts.length){ addLog('【机械】（范围内没有实体）'); done(false); return false; }
+      doShoot(tgts, true);
       return true;
     };
-    // AI 决策
+
+    // AI 决策：找敌人多、误伤少的中心格
     if (owner.isAI || !owner.alive){
       const room = G.dungeon.rooms[m.room];
       let bestCell = null, bestScore = 0;
-      for(let x=0; x<room.w; x++) {
-        for(let y=0; y<room.h; y++) {
+      for (let x = 0; x < room.w; x++) {
+        for (let y = 0; y < room.h; y++) {
           const ents = getEntitiesInBlast(m.room, x, y, RADIUS);
           const foes = ents.filter(e => isEnemyOf(owner, e)).length;
           if (foes === 0) continue;
           const friends = ents.filter(e => !isEnemyOf(owner, e) && e !== owner).length;
           const selfHit = ents.includes(owner) ? 1 : 0;
-          // 敌人越多越好，队友和自己扣分
           const score = foes * 10 - friends * 20 - selfHit * 30;
-          if (score > bestScore) { bestScore = score; bestCell = {x, y}; }
+          if (score > bestScore){ bestScore = score; bestCell = {x: x, y: y}; }
         }
       }
       if (bestCell) return fire(bestCell.x, bestCell.y);
       addLog('【机械】' + tagM + ' 范围太大易误伤，找不到安全炸点，放弃发射。');
       done(false); return false;
     }
-    // 人类决策
-    const opts = [];
-    const seen = new Set();
-    const entsInRoom = allEnts().filter(e => e.alive && e.room === m.room);
-    if (entsInRoom.length === 0) { addLog('（房间内没有实体）'); done(false); return false; }
-    entsInRoom.forEach(e => {
-      const key = e.pos.x + ',' + e.pos.y;
-      if (seen.has(key)) return;
-      seen.add(key);
-      const affected = getEntitiesInBlast(m.room, e.pos.x, e.pos.y, RADIUS);
-      const labels = affected.map(x => {
-        if (x === owner) return '<span style="color:#38f0d8">你自己</span>';
-        if (isEnemyOf(owner, x)) return '<span style="color:#ff3d9a">' + entLabel(x) + '</span>';
-        return '<span style="color:#ffca3a">队友 ' + entLabel(x) + '</span>';
-      });
-      opts.push({
-        label: '中心格 (' + e.pos.x + ',' + e.pos.y + ')',
-        sub: '5x5波及：' + labels.join('、'),
-        run: () => fire(e.pos.x, e.pos.y)
-      });
-    });
-    opts.push({label: '跳过本次发射', run: () => done(false)});
-    showChoice('TNT 爆炸中心选哪里？（半径 2 内所有实体受击）', opts, () => done(false));
+
+    // 人类决策：进入地图瞄准模式，点哪格就以哪格为中心（悬停预览 5x5）
+    enterMachineAim(m, owner, true,
+      (cx, cy) => fire(cx, cy),
+      () => { addLog('【机械】' + tagM + ' 本次跳过发射。'); done(false); }
+    );
     return true;
   }
 
-  const foes = pickable(allEnts(), e => e !== owner && isEnemyOf(owner, e) && e.room === m.room);
-  if (!foes.length){ addLog('【机械】箭矢没有可选中目标。'); done(false); return false; }
+  /* ---------------- 箭矢：8 ATK 单体 ---------------- */
+  // ★ 炮台是物理射击而非技能，【白】挡不住它 —— 所以不走 pickable
+  // ★ 可选友方（帮队友解【蓝】/【白】、补刀），也可以选自己（自残解控）；排序把自己放最后
+  const foes = allEnts().filter(e => e.alive && e.room === m.room);
+  if (!foes.length){ addLog('【机械】箭矢没有可被选中的目标。'); done(false); return false; }
+
   const fire = (t) => {
-    addLog('【机械】' + tagM + ' 射箭 → ' + entLabel(t), 'hl');
-    const ev = {};
-    dealDamage(t, 8 - getDef(t), {srcEnt:owner, dodgeable:true, tag:'箭矢', _ev:ev});
-    if (!ev.evaded) t.hits = (t.hits || 0) + 1;
-    settleWin();
-    done(true);
+    addLog('【机械】' + tagM + ' 射出箭矢 → ' + entLabel(t) + '（基础 8 ATK）', 'hl');
+    doShoot([t], false);
     return true;
   };
-  if (owner.isAI || !owner.alive){ return fire(foes.reduce((a,b)=> a.hp <= b.hp ? a : b)); }
-  const opts = foes.map(e => ({
-    label: entLabel(e),
-    sub: hpDisp(e) + ' · DEF ' + getDef(e),
-    run: () => fire(e)
-  }));
-  opts.push({label: '跳过本次', run: () => done(false)});
-  showChoice('箭矢射向谁？（8 ATK）', opts, () => done(false));
+
+  if (owner.isAI || !owner.alive){
+    const enemies = foes.filter(e => e !== owner && isEnemyOf(owner, e));
+    if (!enemies.length){ addLog('【机械】' + tagM + ' 没有敌方目标，本次不发射。'); done(false); return false; }
+    return fire(enemies.reduce((a,b)=> a.hp <= b.hp ? a : b));
+  }
+
+  // 人类决策：进入地图瞄准模式，点哪个实体就打哪个
+  enterMachineAim(m, owner, false,
+    (t) => fire(t),
+    () => { addLog('【机械】' + tagM + ' 本次跳过发射。'); done(false); }
+  );
   return true;
-}
-function aiPickMachineIsland(m, owner){
-  let best = null, bestScore = -Infinity;
-  G.dungeon.rooms.forEach(isl => {
-    const ents = allEnts().filter(e => e.room === isl.id);
-    const foes = ents.filter(e => isEnemyOf(owner, e));
-    if (!foes.length) return;
-    const friends = ents.filter(e => e !== owner && !isEnemyOf(owner, e));
-    const score = foes.length * 10 - friends.length * 12;
-    if (score > bestScore){ bestScore = score; best = isl.id; }
-  });
-  return best;
 }
 
 /* ============================================================
@@ -5447,6 +5695,22 @@ function monsterStartTurn(m){
   m.actedBans = [];
   m.dodgedThisRound = false;      // ★ 渊火咒术师·秽土转生：每回合只触发一次
   m.syncedThisTurn = false;       // ★ 重置【深渊同化】
+  if (m.type === 'boss_5') m.hitsThisTurn = 0;   // ★ 千眼凝视：每回合重置受击计数
+
+  // ★ 万母之巢：回合开始孵化巢穴爬虫
+  if (m.type === 'boss_4' && G.phase === 'play'){
+    const limit = Math.max(2, G.players.filter(p => p.alive).length * 2);
+    const current = G.monsters.filter(x => x.alive && x.type === 'spawnling' && x.room === m.room).length;
+    if (current < limit){
+      const toSpawn = Math.min(limit - current, 2);
+      addLog('【虫群孵化】' + entLabel(m) + ' 的身体蠕动，孵化出 ' + toSpawn + ' 只巢穴爬虫！', 'hl');
+      for (let i = 0; i < toSpawn; i++){
+        const spot = nearestFreeTile({ room: m.room, pos: m.pos });
+        const sp = spawnMonster('spawnling', m.room, spot, true);
+        if (sp) sp.actions = 0;   // 当回合不出手
+      }
+    }
+  }
   hideChoice();
   render();
   if (!turnStartTick(m)){ // 回合开始结算可能被撕裂打死
@@ -5611,6 +5875,53 @@ function monsterAct(m){
         later(() => monsterAct(m), 380); return;
       }
     }
+  }
+
+  // ★ 万母之巢【精神控制】（第 3 层起解锁）
+  if (isHighFloor && m.type === 'boss_4' && m.skillCd <= 0) {
+    m.skillCd = 3;
+    markActed(m, 'atk');
+    const summons = (G.summons || []).filter(s => s.alive && s.room === m.room &&
+      G.players[s.owner] && G.players[s.owner].alive && G.players[s.owner].room === m.room);
+    if (summons.length > 0) {
+      summons.sort((a, b) => b.hp - a.hp);
+      const s = summons[0];
+      const owner = G.players[s.owner];
+      addLog('【精神控制】' + entLabel(m) + ' 的心智触须钻进了 ' + entLabel(s) + ' 的躯体！', 'hl');
+      addLog(entLabel(s) + ' 突然调转枪口，攻击了主人 ' + entLabel(owner) + '！', 'kill');
+      attackResolve(s, owner, { trueDmg: s.type === 10 });
+    } else {
+      addLog('【精神控制】' + entLabel(m) + ' 找不到可操纵的召唤物，转而撕裂了 ' + entLabel(target) + ' 的精神！', 'hl');
+      dealDamage(target, 10, { trueDmg: true, tag: '精神撕裂' });
+    }
+    m.actions--;
+    if (G.phase !== 'play') return;
+    settleWin(); if (G.phase !== 'play') return;
+    later(() => monsterAct(m), 380);
+    return;
+  }
+
+  // ★ 千面之眼【弱点洞悉】（第 3 层起解锁）
+  if (isHighFloor && m.type === 'boss_5' && m.skillCd <= 0) {
+    m.skillCd = 2;
+    markActed(m, 'atk');
+    addLog('【弱点洞悉】' + entLabel(m) + ' 睁开了无数只眼睛，看破了所有破绽！', 'hl');
+    let broken = 0;
+    allEnts().forEach(t => {
+      if (!t.alive || t.isMonster) return;
+      if (t.room !== m.room) return;
+      if (t.st.white) { addLog(entLabel(t) + ' 处于【白】，免疫了【弱点洞悉】。', 'sys'); return; }
+      if (t.turnSeq != null) t.defBrokenUntil = t.turnSeq + 1;   // 撑到它下个回合结束
+      else t.defBrokenRound = G.round;
+      broken++;
+      addLog(entLabel(t) + ' 的 DEF 降为 0（持续到下个回合结束）。', 'sys');
+    });
+    if (!broken) addLog('【弱点洞悉】没有找到可以看破的防御。', 'sys');
+    m.actions--;
+    if (G.phase !== 'play') return;
+    settleWin(); if (G.phase !== 'play') return;
+    later(() => monsterAct(m), 380);
+    return;
   }
 
   // 末环之影【深渊处决】（第 3 层起解锁）
@@ -5874,6 +6185,9 @@ function render(){
   if (!G) return;
   // 召唤物操控条自愈：一旦不在召唤物阶段（异常中断等），立刻收起
   if (G.sumCtl && G.sub !== 'summon' && G.sub !== 'summonExtra') exitSummonCtrl();
+  // 炮台瞄准自愈：炮台没了 / 弹药被清 / 阶段变了 / 已经轮到别人 / 弹了别的选择面板 → 立刻中止
+  if (G.machineCtl && (!G.machineCtl.m || !G.machineCtl.m.ammo || G.phase !== 'play' ||
+      G.machineCtl.owner !== G.players[G.turn] || choiceOpen())) abortMachineAim();
   const p = cur();
   $('rRound').textContent = G.dungeon ? G.dungeon.floor : 1;
   $('rPlayers').textContent = G.players.filter(q=>q.alive).length;
@@ -6048,9 +6362,10 @@ function summonCtrlEnabled(s, owner){
   return !!(s && s.alive && owner && owner.alive && !owner.isAI &&
             hasSeal(owner, '10') && G && G.phase === 'play' && G.dungeon);
 }
-function enterSummonCtrl(s, owner, done){
+function enterSummonCtrl(s, owner, actionsLeft, done){
   if (!summonCtrlEnabled(s, owner)){ done && done(); return; }
-  G.sumCtl = { s: s, owner: owner, done: (typeof done === 'function') ? done : function(){} };
+  G.sumCtl = { s: s, owner: owner, actionsLeft: actionsLeft,
+               done: (typeof done === 'function') ? done : function(){} };
   const bar = $('sumCtl');
   if (bar) bar.classList.add('on');
   renderSumCtlBar();
@@ -6059,21 +6374,102 @@ function enterSummonCtrl(s, owner, done){
 function exitSummonCtrl(){
   if (G) G.sumCtl = null;
   const bar = $('sumCtl');
-  if (bar) bar.classList.remove('on');
+  if (bar) { bar.classList.remove('on'); bar.classList.remove('aim'); }
+}
+
+/* ============================================================
+   ★ 炮台地图瞄准模式（箭矢点实体 / TNT 点格子）
+   ============================================================ */
+function machineAimEnabled(m, owner){
+  return !!(m && owner && owner.alive && !owner.isAI &&
+            G && G.phase === 'play' && G.dungeon &&
+            m.room === G.dungeon.currentRoom);
+}
+function enterMachineAim(m, owner, isTnt, onFire, onCancel){
+  exitMachineAim();
+  if (!machineAimEnabled(m, owner)){
+    addLog('【机械】炮台 #' + m.mid + ' 不在当前房间（或已无法行动），本次跳过。', 'sys');
+    onCancel && onCancel();
+    return;
+  }
+  G.machineCtl = { m: m, owner: owner, isTnt: !!isTnt,
+                   onFire: onFire, onCancel: onCancel || function(){}, hover: null };
+  const bar = $('sumCtl');
+  if (bar) { bar.classList.add('on'); bar.classList.add('aim'); }
+  renderMachineAimBar();
+  render();
+}
+function exitMachineAim(){
+  if (G) G.machineCtl = null;
+  const bar = $('sumCtl');
+  if (bar) { bar.classList.remove('on'); bar.classList.remove('aim'); }
+  const box = $('scOpts'); if (box) box.innerHTML = '';
+}
+/* 异常中止：收起瞄准条并回调 onCancel（异步，避免在 render 栈里改游戏状态） */
+function abortMachineAim(){
+  const st = G && G.machineCtl;
+  if (!st) return;
+  exitMachineAim();
+  if (typeof st.onCancel === 'function') setTimeout(st.onCancel, 0);
+}
+function renderMachineAimBar(){
+  const box = $('scOpts');
+  if (!box) return;
+  const st = G.machineCtl;
+  if (!st){ box.innerHTML = ''; return; }
+  const m = st.m, isTnt = st.isTnt;
+  const ammoName = isTnt ? 'TNT 5x5 爆炸' : '箭矢单体射击';
+  const lead = isTnt ? '请在地图上点任意格子作为爆炸中心' : '请在地图上点一个实体作为射击目标';
+  $('scTitle').innerHTML =
+    '炮台瞄准 · <b style="color:#ff9ecb">' + ammoName + '</b>' +
+    '<span style="color:#8b93b0"> — ' + lead + '</span>' +
+    (isTnt ? '<span style="color:#8b93b0">（悬停可预览范围）</span>' : '');
+  box.innerHTML = '';
+  const add = (label, sub, fn) => {
+    const b = document.createElement('button');
+    b.className = 'opt';
+    b.innerHTML = label + (sub ? '<span class="sub">' + sub + '</span>' : '');
+    b.onclick = () => { fn(); };
+    box.appendChild(b);
+  };
+  add('取消瞄准', '本次不发射，继续主要行动', () => {
+    const st2 = G.machineCtl;
+    exitMachineAim();
+    if (st2) st2.onCancel();
+  });
+}
+function machineAimClick(x, y){
+  const st = G.machineCtl;
+  if (!st) return;
+  const isTnt = st.isTnt, onFire = st.onFire;
+  if (isTnt){
+    exitMachineAim();
+    onFire(x, y);
+    return;
+  }
+  const ent = tileOccupant(st.m.room, x, y);
+  if (ent && ent.alive){
+    exitMachineAim();
+    onFire(ent);
+  } else {
+    addLog('请点击一个实体来射击。', 'sys');
+  }
 }
 function renderSumCtlBar(){
   const box = $('scOpts');
   if (!box) return;
   const st = G.sumCtl;
   if (!st){ box.innerHTML = ''; return; }
-  const s = st.s, owner = st.owner, done = st.done;
+  const s = st.s, owner = st.owner, done = st.done, actionsLeft = st.actionsLeft;
   $('scTitle').innerHTML =
     '召唤物行动 · <b style="color:#c4b5fd">' + s.name + '</b>' +
     '（HP ' + Math.max(0, s.hp) + '/' + s.maxHp + ' · ATK ' + summonAtk(s) +
-    ' · 射程 ' + rngTxt(summonRngOf(s)) + '）' +
+    ' · 射程 ' + rngTxt(summonRngOf(s)) +
+    ' · <b style="color:#ffca3a">剩余 ' + actionsLeft + ' 行动点</b>）' +
     '<span style="color:#8b93b0"> — 点地图上的</span>' +
     '<b style="color:#a78bfa">紫色格</b><span style="color:#8b93b0">移动，点</span>' +
-    '<b style="color:#ff3d9a">红框敌人</b><span style="color:#8b93b0">攻击</span>';
+    '<b style="color:#ff3d9a">红框敌人</b><span style="color:#8b93b0"> / </span>' +
+    '<b style="color:#ffca3a">黄框友方</b><span style="color:#8b93b0">攻击</span>';
   box.innerHTML = '';
   const add = (label, sub, fn) => {
     const b = document.createElement('button');
@@ -6086,11 +6482,11 @@ function renderSumCtlBar(){
     add('无法移动', moveLockReason(s), () => {});
     box.lastChild.disabled = true;
   }
-  add('待机 / 结束', '本回合不行动，回合继续推进', () => {
-    exitSummonCtrl(); summonHumanGo(s, owner, {act:'idle'}, done);
+  add('待机 / 结束', '放弃剩余行动点，回合继续推进', () => {
+    exitSummonCtrl(); summonHumanGo(s, owner, {act:'idle'}, actionsLeft, done);
   });
-  add('自动行动', '交给索敌 AI（同没有御灵时）', () => {
-    exitSummonCtrl(); summonHumanGo(s, owner, null, done);
+  add('自动行动', '按索敌 AI 执行剩余行动点（同没有御灵时）', () => {
+    exitSummonCtrl(); summonHumanGo(s, owner, null, actionsLeft, done);
   });
   if (canSummonUseSeal7(s, owner)){
     add('⚡ 蹑景' + (s.useSeal7 ? '（已选 ✓）' : ''),
@@ -6101,21 +6497,22 @@ function renderSumCtlBar(){
     add('命中效果：' + HITFX[s.hitEffect || 'red'].name + '（点击更换）',
         HITFX[s.hitEffect || 'red'].desc +
         (s.hitEffect === 'grey' ? ' · 命中时解：' + greyTargetHint(s) : ''),
-        () => { exitSummonCtrl(); pickSummonHitEffect(s, owner, done); });
+        () => { exitSummonCtrl(); pickSummonHitEffect(s, owner, actionsLeft, done, false); });
   }
   add('列表操作', '改回按钮列表（小屏更顺手）', () => {
-    exitSummonCtrl(); summonPanel(s, owner, done, true);
+    exitSummonCtrl(); summonPanel(s, owner, actionsLeft, done, true);
   });
 }
 function summonCtrlClick(x, y){
   const st = G.sumCtl;
   if (!st) return;
-  const s = st.s, owner = st.owner, done = st.done;
+  const s = st.s, owner = st.owner, done = st.done, actionsLeft = st.actionsLeft;
   if (!s || !s.alive){ exitSummonCtrl(); done(); return; }
   if (s.room !== G.dungeon.currentRoom){ exitSummonCtrl(); renderSumCtlBar(); return; }
 
   const tgt = tileOccupant(s.room, x, y);
-  if (tgt && tgt !== s && isEnemyOf(s, tgt)){
+  // ★ 任何实体（含队友 / 其它召唤物）都可点选攻击，不再只认敌人
+  if (tgt && tgt !== s){
     if (s.st && s.st.blue){
       addLog(entLabel(s) + ' 处于【蓝】，无法攻击（需先受到一次攻击解除）。', 'sys');
       render(); return;
@@ -6131,7 +6528,7 @@ function summonCtrlClick(x, y){
       render(); return;
     }
     exitSummonCtrl();
-    summonHumanGo(s, owner, { act:'atk', target: tgt }, done);
+    summonHumanGo(s, owner, { act:'atk', target: tgt }, actionsLeft, done);
     return;
   }
 
@@ -6145,7 +6542,7 @@ function summonCtrlClick(x, y){
   }
   if (reachableTiles(s, 2).some(t => t.x === x && t.y === y)){
     exitSummonCtrl();
-    summonHumanGo(s, owner, { act:'move', pos:{ x:x, y:y } }, done);
+    summonHumanGo(s, owner, { act:'move', pos:{ x:x, y:y } }, actionsLeft, done);
     return;
   }
   if (tgt){
@@ -6161,9 +6558,29 @@ function summonCtrlClick(x, y){
 /* ============================================================
    画布点击交互（移动 / 查看格子）
    ============================================================ */
+cv.addEventListener('mousemove', e => {
+  if (!G || G.phase !== 'play' || !G.dungeon) return;
+  if (!G.machineCtl || !G.machineCtl.isTnt) return;
+  const t = tileAtEvent(e);
+  const h = t ? { x: t.tx, y: t.ty } : null;
+  const prev = G.machineCtl.hover;
+  const same = (!prev && !h) || (prev && h && prev.x === h.x && prev.y === h.y);
+  if (!same){ G.machineCtl.hover = h; render(); }   // 只在跨格时重绘，避免每帧全画
+});
+cv.addEventListener('mouseleave', () => {
+  if (G && G.machineCtl && G.machineCtl.hover){ G.machineCtl.hover = null; render(); }
+});
+
 cv.addEventListener('click', e => {
   if (!G || G.phase !== 'play' || !G.dungeon) return;
   if (G.animating) return;
+
+  // ★ 炮台瞄准模式：优先级最高，点地图 = 选择射击目标 / 爆炸中心
+  if (G.machineCtl && !choiceOpen()){
+    const t = tileAtEvent(e);
+    if (t) machineAimClick(t.tx, t.ty);
+    return;
+  }
 
   // ★ 召唤物地图操控：召唤物回合里，点地图 = 移动 / 攻击（不占用玩家自己的点击逻辑）
   if (G.sumCtl && !choiceOpen()){
@@ -6181,9 +6598,9 @@ cv.addEventListener('click', e => {
   if (!tile0) return;
   const room = tile0.room, tx = tile0.tx, ty = tile0.ty;
 
-  // 1. 点击了怪物 -> 攻击
+  // 1. 点击了任意实体 -> 攻击（含队友 / 召唤物，可用于解【蓝】【白】、补刀）
   const ent = tileOccupant(p.room, tx, ty);
-  if (ent && ent.isMonster){
+  if (ent && ent !== p){
     if (p.st && p.st.blue){
       addLog(p.name + ' 处于【蓝】的状态，无法攻击（需要受到一次攻击才能解除）。', 'sys');
       render();
@@ -6573,6 +6990,7 @@ const MONSTER_DATA = {
     { name:'史莱姆', icon:'🟢', hp:'10', atk:'2', def:'0', rng:'1', act:'1', desc:'<b>【胶质】</b>受到的普通攻击伤害 -1（最低为 1）。' },
     { name:'哥布林弓手', icon:'🏹', hp:'8', atk:'3', def:'0', rng:'4', act:'1', desc:'<b>【穿透箭】</b>造成真实伤害。命中时附加【破魔】（清空目标所有【尘】）。' },
     { name:'暗影狼', icon:'🐺', hp:'20', atk:'5', def:'1', rng:'1', act:'2', desc:'<b>【撕裂突袭】</b>若本回合移动过且命中，附加 1 层【撕裂】。' },
+    { name:'巢穴爬虫', icon:'🐛', hp:'15', atk:'4', def:'0', rng:'1', act:'1', desc:'<b>【自爆】</b>死亡时爆裂，对同房间所有其他单位造成 3 点真实伤害（可被【闪避】）。<br>只由万母之巢孵化，会连锁引爆同伴。' },
   ],
   elite: [
     { name:'兽人', icon:'👹', hp:'28', atk:'6', def:'2', rng:'1', act:'2', desc:'<b>【狂怒】</b>半血时清空自身负面，DEF 降为 0，ATK 大幅提升。<br><b>【碎裂重击】</b>（第 3 层起）1.5 倍伤害，永久摧毁目标一件护甲或武器；目标空手时改为 10 点真实伤害。' },
@@ -6584,6 +7002,8 @@ const MONSTER_DATA = {
     { name:'地牢看守', icon:'👑', hp:'80', atk:'8', def:'3', rng:'1', act:'2', desc:'<b>【锁血】</b>2 段血（第 2 层起为 3 段）。锁血时不清理负面。<br><b>【深渊同化】</b>攻击被玩家大幅减伤（减免>50%）时，永久 ATK+2、DEF+1。<br><b>【战吼】</b>进入 P2 时，全场施加 2 回合【黄】并召唤精英。<br><b>【荆棘反噬】</b>单次受到 ≥30 点伤害时，把超出部分的 50% 反弹为真实伤害（无上限）。' },
     { name:'深渊领主', icon:'😈', hp:'120', atk:'10', def:'5', rng:'1', act:'2', desc:'<b>【锁血】</b>3 段血。不清理负面，带有同化机制。<br><b>【深渊诅咒】</b>所有攻击附带 1 层【撕裂】。<br><b>【召唤】</b>进入 P2 召唤咒术师，P3 召唤吞噬者。<br><b>【荆棘反噬】</b>单次受到 ≥32 点伤害时，把超出部分的 60% 反弹为真实伤害（无上限）。' },
     { name:'末环之影', icon:'👾', hp:'180', atk:'12', def:'6', rng:'1', act:'3', desc:'<b>【锁血】</b>3 段血。不清理负面，带有同化机制。<br><b>【引力黑洞】</b>将所有玩家拉到身边并造成 5 点真伤。<br><b>【深渊处决】</b>对 HP ≤ 30% 的残血玩家直接斩杀。<br><b>【召唤】</b>P2 召唤 2 吞噬者，P3 召唤 2 咒术师。<br><b>【荆棘反噬】</b>单次受到 ≥35 点伤害时，把超出部分的 70% 反弹为真实伤害（无上限）。' },
+    { name:'万母之巢', icon:'🦋', hp:'180', atk:'12', def:'6', rng:'1', act:'2', desc:'<b>【虫群孵化】</b>每回合开始孵化最多 2 只巢穴爬虫（同房间上限 = 存活人数 ×2）。<br><b>【精神控制】</b>（第 3 层起，CD 3）操纵同房间 HP 最高的召唤物调转枪口攻击其主人；没有召唤物时，改为对目标造成 10 点真实伤害（精神撕裂）。<br><b>【万物归巢】</b>锁血时吞掉同房间所有召唤物与爬虫，每吞 1 只永久 ATK+1（不召唤精英）。<br><b>【荆棘反噬】</b>单次受到 ≥34 点伤害时，把超出部分的 60% 反弹为真实伤害（无上限）。' },
+    { name:'千面之眼', icon:'👁', hp:'150', atk:'15', def:'8', rng:'3', act:'2', desc:'<b>【千眼凝视】</b>每回合最多承受 3 + 存活人数×2 次伤害判定，超出部分直接免疫（超出的攻击按「闪避」处理）。<br><b>【弱点洞悉】</b>（第 3 层起，CD 2）看破同房间所有敌人的防御，其 DEF 归零、直到各自下个回合结束（【白】可免疫）。<br><b>【千手之缚】</b>锁血时给全场敌人挂【黄】并凝出护盾（每名存活玩家 10 点），不召唤精英。<br><b>【荆棘反噬】</b>单次受到 ≥35 点伤害时，把超出部分的 70% 反弹为真实伤害（无上限）。' },
   ]
 };
 
@@ -6616,8 +7036,9 @@ function renderMonsterModal(){
     renderSection('深渊首领', MONSTER_DATA.boss) +
     `<div style="margin-top:20px;padding:12px;border-radius:8px;background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.3);font-size:12px;color:#c4b5fd;">
       <b>【无尽模式强化】</b><br>
-      第 4 层起，首领获得【深渊·N阶】前缀（每 3 层升 1 阶）：HP +30%/阶、ATK +15%/阶；看守额外 +3 DEF/阶，领主射程 +1，末环之影黑洞冷却缩短。<br>
-      首领每次锁血都会召唤精英，第 4 层起每 3 层再多召 1 只，且召唤物不掉落刻印/遗器。
+      第 4 层起，首领获得【深渊·N阶】前缀（每 3 层升 1 阶）：HP +30%/阶、ATK +15%/阶；看守额外 +3 DEF/阶，领主射程 +1，末环之影黑洞冷却缩短，万母之巢 +1 DEF/阶，千面之眼射程 +1/阶。<br>
+      第 3 层固定末环之影，第 4 层起按「末环之影 → 看守 → 领主 → 万母之巢 → 千面之眼」顺序循环。<br>
+      首领每次锁血都会召唤精英，第 4 层起每 3 层再多召 1 只，且召唤物不掉落刻印/遗器（万母之巢 / 千面之眼 改为不召唤，走各自的锁血技）。
     </div>`;
   body.scrollTop = 0;
 }
@@ -6748,7 +7169,7 @@ function drawDungeon(){
 
   // 移动范围高亮（如果是玩家回合且能移动）
   const hiP = G.players[G.turn];
-  if (hiP && hiP.alive && !hiP.isMonster && isHumanTurn() && hiP.actions > 0 && !moveLocked(hiP) && !G.sumCtl) {
+  if (hiP && hiP.alive && !hiP.isMonster && isHumanTurn() && hiP.actions > 0 && !moveLocked(hiP) && !G.sumCtl && !G.machineCtl) {
     const reachable = reachableTiles(hiP, 2);
     reachable.forEach(t => {
       const px = ox + t.x * TILE, py = oy + t.y * TILE;
@@ -6757,6 +7178,46 @@ function drawDungeon(){
       ctx.strokeStyle = 'rgba(255,214,92,0.85)';
       ctx.lineWidth = 1.5;
       ctx.strokeRect(px+2, py+2, TILE-4, TILE-4);
+    });
+  }
+
+  // ★ 炮台 TNT 瞄准预览：以悬停格为中心画 5×5 波及范围
+  if (G.machineCtl && G.machineCtl.isTnt && G.machineCtl.hover){
+    const h = G.machineCtl.hover;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(ox, oy, pw, ph); ctx.clip();   // 别画到房间外
+    // 逐格铺，能看清「具体哪几格被打」；中心格颜色更深
+    for (let gx = h.x - 2; gx <= h.x + 2; gx++){
+      for (let gy = h.y - 2; gy <= h.y + 2; gy++){
+        if (gx < 0 || gy < 0 || gx >= room.w || gy >= room.h) continue;
+        const cxp = ox + gx * TILE, cyp = oy + gy * TILE;
+        const isMid = (gx === h.x && gy === h.y);
+        ctx.fillStyle = isMid ? 'rgba(255,61,154,0.32)' : 'rgba(255,61,154,0.10)';
+        ctx.fillRect(cxp, cyp, TILE, TILE);
+        ctx.strokeStyle = 'rgba(255,61,154,0.4)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(cxp + 0.5, cyp + 0.5, TILE - 1, TILE - 1);
+      }
+    }
+    // 外框虚线（超出房间的部分会被 clip 掉，正好提示「打不到」）
+    ctx.strokeStyle = '#ff3d9a';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 4]);
+    ctx.strokeRect(ox + (h.x - 2) * TILE, oy + (h.y - 2) * TILE, TILE * 5, TILE * 5);
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+  // ★ 炮台箭矢瞄准：给同房间所有可点实体描粉框，免得不知道能打谁
+  if (G.machineCtl && !G.machineCtl.isTnt){
+    const mm = G.machineCtl.m;
+    allEnts().filter(t => t.alive && t.pos && t.room === mm.room).forEach(t => {
+      const px = ox + t.pos.x * TILE, py = oy + t.pos.y * TILE;
+      ctx.save();
+      ctx.strokeStyle = '#ff9ecb';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 3]);
+      ctx.strokeRect(px + 2, py + 2, TILE - 4, TILE - 4);
+      ctx.restore();
     });
   }
 
@@ -6775,11 +7236,14 @@ function drawDungeon(){
         });
       }
       const srng = summonRngOf(sc);
-      foesOfEnt(sc).filter(t => t.alive && t.room === sc.room && t.pos && entDist(sc, t) <= srng)
+      /* ★ 敌方红框、友方黄框，都可点选攻击 */
+      allEnts().filter(t => t.alive && t !== sc && t.room === sc.room && t.pos && entDist(sc, t) <= srng)
         .forEach(t => {
           const px = ox + t.pos.x * TILE, py = oy + t.pos.y * TILE;
+          const foe = isEnemyOf(sc, t);
           ctx.save();
-          ctx.strokeStyle = '#ff3d9a'; ctx.lineWidth = 2.5;
+          ctx.strokeStyle = foe ? '#ff3d9a' : '#ffca3a';
+          ctx.lineWidth = 2.5;
           ctx.setLineDash([5,3]);
           ctx.strokeRect(px+2, py+2, TILE-4, TILE-4);
           ctx.restore();
