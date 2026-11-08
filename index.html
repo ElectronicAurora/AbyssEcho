@@ -11,17 +11,19 @@
   --cyan:#4df5de; --pink:#ff3d9a; --amber:#ffca3a; --violet:#9d6cf9;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
+/* ================= 全局：锁定屏幕高度，禁止页面整体滚动 ================= */
+/* ★ 用 dvh 跟随移动端浏览器工具栏的收放，避免 100vh 被地址栏吃掉一截 */
+html,body{height:100vh;height:100dvh;overflow:hidden;margin:0}
 body{
   background:radial-gradient(1000px 700px at 10% -10%,rgba(139,92,246,.3),transparent 60%),
              radial-gradient(900px 600px at 100% 110%,rgba(56,240,216,.22),transparent 60%),var(--bg);
   color:var(--text);
   font-family:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
-  padding:16px;display:flex;justify-content:center;
+  padding:10px;display:flex;justify-content:center;box-sizing:border-box;
 }
-#app{width:100%;max-width:1090px}
+#app{width:100%;max-width:1090px;height:100%;display:flex;flex-direction:column;overflow:hidden}
 
-header{display:flex;align-items:center;gap:14px;margin-bottom:14px;flex-wrap:wrap}
+header{display:flex;align-items:center;gap:14px;margin-bottom:10px;flex-wrap:wrap;flex:0 0 auto}
 h1{
   font-size:22px;letter-spacing:.04em;
   background:linear-gradient(100deg,var(--cyan),#7dd3fc 45%,var(--pink));
@@ -34,15 +36,27 @@ h1{
 .round{margin-left:auto;font-size:12.5px;color:var(--dim);font-variant-numeric:tabular-nums}
 .round b{color:var(--amber);font-size:15px}
 
-.game{display:grid;grid-template-columns:minmax(0,1fr) 306px;gap:14px;align-items:start}
-@media(max-width:900px){.game{grid-template-columns:1fr}}
+/* ================= 布局核心 ================= */
+.game{
+  display:grid;grid-template-columns:minmax(0,1fr) 306px;grid-template-rows:minmax(0,1fr);
+  gap:12px;flex:1 1 0;
+  min-height:0;   /* ★ 非常关键：允许子元素在 flex 容器内正确计算高度 */
+}
+.game > div:first-child{display:flex;flex-direction:column;min-height:0;gap:10px}
+.game > div:last-child{display:flex;flex-direction:column;min-height:0;gap:10px}
 
 .card{
   background:var(--panel);border:1px solid var(--line);
   border-radius:16px;backdrop-filter:blur(8px);
 }
-#mapWrap{overflow:hidden;border-radius:16px;position:relative;background:var(--sea)}
-canvas{display:block;width:100%;height:auto}
+/* ★ 地图：占据剩余的所有高度 */
+#mapWrap{
+  overflow:hidden;border-radius:14px;position:relative;background:var(--sea);
+  flex:1 1 0;min-height:0;display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--line);
+}
+/* ★ 画布：撑满地图框，按 720:620 等比内缩（object-fit:contain） */
+canvas{display:block;max-width:100%;max-height:100%;width:100%;height:100%;object-fit:contain}
 #turnbar{
   position:absolute;left:0;right:0;top:0;padding:9px 14px;
   background:linear-gradient(180deg,rgba(4,8,18,.92),rgba(4,8,18,0));
@@ -50,7 +64,7 @@ canvas{display:block;width:100%;height:auto}
 }
 #turnbar .dot{width:9px;height:9px;border-radius:50%;box-shadow:0 0 10px currentColor;background:currentColor}
 
-.plist{padding:10px;display:flex;flex-direction:column;gap:8px}
+.plist{flex:1 1 auto;min-height:0;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
 .pcard{
   border:1px solid rgba(255,255,255,.12);border-radius:12px;
   padding:9px 10px;background:rgba(0,0,0,.14);transition:.2s;
@@ -96,17 +110,16 @@ canvas{display:block;width:100%;height:auto}
   border:1px solid rgba(56,240,216,.45);color:#7ff0e2;background:rgba(56,240,216,.1);
 }
 
-#actZone{margin-top:14px;padding:12px}
-.acts{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+/* ★ 按钮区：锁定在底部，最高不超过屏幕的 28% */
+#actZone{flex:0 0 auto;max-height:28vh;overflow-y:auto;padding:10px;border-radius:14px}
+.acts{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px}
 .abtn{
   border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--text);
-  padding:13px 10px;border-radius:12px;cursor:pointer;font-size:15px;font-weight:600;
+  padding:10px 8px;border-radius:9px;cursor:pointer;font-size:14px;font-weight:600;
   transition:.16s;font-family:inherit;min-width:0;overflow:hidden;
 }
-.abtn small{
-  display:block;font-weight:400;font-size:11px;color:var(--dim);margin-top:3px;
-  line-height:1.35;white-space:normal;word-break:break-word;
-}
+/* 屏幕不够高时，隐藏按钮下方的小字说明，防止溢出 */
+.abtn small{display:none}
 .abtn:hover:not(:disabled){background:rgba(56,240,216,.13);border-color:rgba(56,240,216,.5);transform:translateY(-1px)}
 .abtn:disabled{opacity:.34;cursor:not-allowed}
 body.choosing .abtn{opacity:.34;cursor:not-allowed;pointer-events:none;transform:none}
@@ -142,14 +155,75 @@ body.choosing .abtn:hover{background:rgba(255,255,255,.05);border-color:var(--li
 }
 .cancel:hover{color:var(--pink)}
 
-#logBox{margin-top:14px;padding:11px 12px;max-height:190px;overflow-y:auto}
-#logBox h4{font-size:11px;color:var(--dim);letter-spacing:.12em;text-transform:uppercase;margin-bottom:7px}
+/* 日志固定高度，内部滚动 */
+#logBox{flex:0 0 140px;padding:10px 12px;overflow-y:auto;margin-top:0;border-radius:14px}
+#logBox h4{display:none}
 #log{font-size:11.8px;line-height:1.85;color:#c2d0ec}
 #log div{padding:1px 0;border-bottom:1px solid rgba(255,255,255,.07)}
 #log .hl{color:var(--amber)}
 #log .kill{color:var(--pink);font-weight:600}
 #log .sys{color:#5f6d90;font-style:italic}
 
+/* ================= 手机端适配（宽度 ≤ 900px） ================= */
+@media (max-width:900px){
+  /* 1. 解除全局高度锁定，允许手机页面向下滚动 */
+  html,body{height:auto;overflow-y:auto}
+  body{display:block;padding:0}
+  #app{height:auto;min-height:100vh;display:block;padding:0;max-width:100%}
+
+  /* 2. 顶部状态栏锁定（46px 固定高度，供地图吸顶对齐） */
+  header{
+    position:sticky;top:0;z-index:60;height:46px;padding:0 12px;margin-bottom:0;
+    background:var(--bg);border-bottom:1px solid var(--line);
+    flex-wrap:nowrap;overflow:hidden;gap:10px;
+  }
+  header h1{font-size:18px;white-space:nowrap;flex:0 0 auto}
+  header .badge{display:none}
+  #monsterBtn{display:inline-block;padding:2px 8px;font-size:11px;white-space:nowrap;flex:0 0 auto}
+  .round{margin-left:auto;font-size:11px;white-space:nowrap;flex:0 0 auto;overflow:hidden}
+  .round b{font-size:13px}
+  #turnbar{font-size:11.5px;padding:6px 10px;line-height:1.5}
+
+  /* 3. 主容器变为块级流 */
+  .game{display:block;gap:0;min-height:0}
+  .game > div:first-child,.game > div:last-child{display:block;min-height:0;gap:0}
+
+  /* 4. ★ 地图区域：吸顶固定，高度占屏幕 45% */
+  #mapWrap{
+    position:sticky;top:46px;z-index:50;height:45vh;min-height:0;
+    flex:none;border-radius:0;border:none;border-bottom:2px solid var(--cyan);
+    box-shadow:0 10px 20px -10px rgba(0,0,0,.8);
+  }
+  canvas{max-width:100%;max-height:100%}
+
+  /* 5. 操作按钮区：变成 4 列网格，紧凑排版 */
+  #actZone{margin:8px;max-height:none;padding:10px;border-radius:12px;overflow:visible}
+  .acts{grid-template-columns:repeat(4,1fr);gap:6px}
+  .abtn{padding:10px 2px;font-size:12px;border-radius:8px}
+  .sysbtns{margin-top:8px;position:static;bottom:auto;padding:0;background:none}
+
+  /* 6. 玩家面板：变成横向滑动卡片，极大节省纵向空间 */
+  .game > div:last-child{display:block;margin:0 8px}
+  .plist{
+    display:flex;flex-direction:row;overflow-x:auto;overflow-y:hidden;padding:8px;gap:8px;
+    flex:none;border-radius:12px;margin-bottom:8px;
+  }
+  .pcard{min-width:250px;flex:0 0 auto;padding:10px}
+  /* 手机上隐藏过于繁琐的状态文字 */
+  .pcard .bag,.pcard .sealrow,.pcard .strow{display:none}
+
+  /* 7. 日志区放在最底下 */
+  #logBox{margin:0 8px 20px 8px;max-height:250px;flex:none;padding:10px;border-radius:12px}
+}
+/* 超窄屏（≤420px）：进一步压缩顶栏，保证一行放得下 */
+@media (max-width:420px){
+  header{gap:8px;padding:0 10px}
+  h1{font-size:14px}
+  #monsterBtn{font-size:9.5px;padding:2px 6px}
+  .round{font-size:9.5px}
+  .round b{font-size:12px}
+  .abtn{font-size:11px;padding:9px 1px}
+}
 .modal{
   position:fixed;inset:0;display:grid;place-items:center;padding:20px;z-index:50;
   background:radial-gradient(circle at 50% 40%,rgba(8,12,26,.9),rgba(3,5,12,.97));
@@ -193,9 +267,12 @@ input[type=number],input[type=text]{
 .prow .mode.human{background:rgba(56,240,216,.16);border-color:rgba(56,240,216,.55);color:var(--cyan)}
 .prow .mode.bot{background:rgba(139,92,246,.2);border-color:rgba(139,92,246,.6);color:#c4b5fd}
 .prow .mode.locked{opacity:.45;cursor:default}
-.sysbtns{display:flex;gap:8px;margin-top:10px}
+/* ★ 按钮区限高后可能装不下，系统按钮吸在底部，保证「规则 / 强制结束 / 返回主页面」随时点得到 */
+.sysbtns{display:flex;gap:8px;margin-top:6px;position:sticky;bottom:-10px;z-index:3;
+  padding:6px 0 8px;background:rgba(10,18,32,.97);backdrop-filter:blur(6px);
+  border-top:1px solid rgba(150,195,255,.16)}
 .sysbtn{
-  flex:1;padding:8px 4px;border-radius:9px;cursor:pointer;font-size:11.5px;font-family:inherit;
+  flex:1;padding:7px 4px;border-radius:9px;cursor:pointer;font-size:11.5px;font-family:inherit;
   border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--dim);transition:.15s;
 }
 .sysbtn:hover{border-color:rgba(255,61,154,.6);color:#ff9ecb}
@@ -434,8 +511,10 @@ input[type=number],input[type=text]{
       </div>
       <div class="rpane" data-pane="rule">
         <div class="rsec">地下城流程</div>
-        <p>共 <b>3 层 + 无尽</b>。每层有<b>入口房</b>、<b>战斗房</b>、<b>精英房</b>、<b>宝藏房</b>、<b>复活房</b>、<b>BOSS 房</b>（含楼梯）。<br>
-           打完 BOSS 才能下楼；第 3 层 BOSS 后可选择继续下潜进入无尽模式。</p>
+        <p>共 <b>5 层 + 无尽</b>。每层有<b>入口房</b>、<b>战斗房</b>、<b>精英房</b>、<b>宝藏房</b>、<b>复活房</b>、<b>BOSS 房</b>（含楼梯）。<br>
+           打完 BOSS 才能下楼；前 5 层依次是地牢看守 → 深渊领主 → 末环之影 → 万母之巢 → 千面之眼，<br>
+           击败第 5 层 BOSS 后可选择继续下潜进入无尽模式（五个 BOSS 依次轮换）；<br>
+           进入无尽模式后每 5 层提升一阶【深渊·N阶】强化（第 6~10 层 1 阶、11~15 层 2 阶，依次递增）。</p>
         <div class="rsec">回合与行动点</div>
         <p>每回合 <b>2 点行动点</b>。移动 / 攻击 / 开箱 / 技能 / 道具 各占 1 点；附魔、敕禁、商店不占点。<br>
            回合顺序：<b>玩家全动 → 怪物全动</b>（首轮玩家先手）。</p>
@@ -456,7 +535,7 @@ input[type=number],input[type=text]{
            🕷️ <b>噬法幽魂</b>：射程 3。【虚空净化】强制清空全场【尘】/【护盾】/【蓄闪】/【白】；恐惧近战，进入 2 格内就后撤。<br>
            🐛 <b>巢穴爬虫</b>：万母之巢孵化的杂兵，死亡时【自爆】对同房间其他单位造成 3 点真实伤害，会连锁引爆同伴。</p>
         <div class="rsec">首领召唤</div>
-        <p>首领每进入新阶段都会撕裂空间召唤精英（召唤物不掉刻印）：看守召 1 只咒术师；深渊领主召 1 只咒术师 / 1 只吞噬者；末环之影召 2 只吞噬者 / 2 只咒术师。无尽模式每 3 层额外多召 1 只。</p>
+        <p>首领每进入新阶段都会撕裂空间召唤精英（召唤物不掉刻印）：看守召 1 只咒术师；深渊领主召 1 只咒术师 / 1 只吞噬者；末环之影召 2 只吞噬者 / 2 只咒术师。无尽模式从第 6 层起每 3 层额外多召 1 只。</p>
         <p><b>万母之巢</b>与<b>千面之眼</b>不召唤精英：前者锁血时【万物归巢】吞掉场上所有召唤物与爬虫（每吞 1 只永久 ATK+1），后者锁血时【千手之缚】给全场挂【黄】并按存活人数凝出护盾。</p>
       </div>
       <div class="rpane" data-pane="faq">
@@ -840,12 +919,18 @@ function generateDungeon(floor){
       let bossType = 'boss_1';
       if (floor === 2) {
         bossType = 'boss_2';
-      } else if (floor >= 3) {
-        // 第 3 层固定末环之影，第 4 层起 5 个 BOSS 轮换
-        const cycle = (floor - 3) % 5;
-        if (cycle === 0) bossType = 'boss_3';
-        else if (cycle === 1) bossType = 'boss_1';
-        else if (cycle === 2) bossType = 'boss_2';
+      } else if (floor === 3) {
+        bossType = 'boss_3';
+      } else if (floor === 4) {
+        bossType = 'boss_4';
+      } else if (floor === 5) {
+        bossType = 'boss_5';
+      } else if (floor > 5) {
+        // 第 6 层起（无尽模式）五个 BOSS 依次轮换
+        const cycle = (floor - 6) % 5;
+        if (cycle === 0) bossType = 'boss_1';
+        else if (cycle === 1) bossType = 'boss_2';
+        else if (cycle === 2) bossType = 'boss_3';
         else if (cycle === 3) bossType = 'boss_4';
         else bossType = 'boss_5';
       }
@@ -983,8 +1068,8 @@ function spawnMonster(type, roomId, pos, summonedByBoss){
     isSummonedByBoss: !!summonedByBoss,   // ★ 新增：BOSS 召唤标记
   };
   // ★ 无尽模式 BOSS 专属强化
-  if (T.tier === 'boss' && G.dungeon && G.dungeon.floor > 3) {
-    const endlessCycle = Math.floor((G.dungeon.floor - 4) / 3) + 1; // 每 3 层加强一次
+  if (T.tier === 'boss' && G.dungeon && G.dungeon.floor > 5) {
+    const endlessCycle = Math.floor((G.dungeon.floor - 6) / 5) + 1; // 每 5 层一阶：6~10 层 1 阶、11~15 层 2 阶、16~20 层 3 阶
     m.name = '【深渊·' + endlessCycle + '阶】' + T.name;
 
     // 成长：血量 +30% / 阶，攻击 +15% / 阶
@@ -2167,9 +2252,9 @@ function onBossLock(t, floor){
     if (t.phaseIndex === 2) { summonCount = 2; summonType = 'warlock'; }
   }
 
-  // 无尽模式加成：每 3 层多招 1 只
-  if (dungeonFloor > 3) {
-    summonCount += Math.floor((dungeonFloor - 1) / 3);
+  // 强化层加成：每 5 层多招 1 只（与【深渊·N阶】同步：6~10 层 +1、11~15 层 +2）
+  if (dungeonFloor > 5) {
+    summonCount += Math.floor((dungeonFloor - 6) / 5) + 1;
   }
 
   if (summonCount > 0) {
@@ -2458,13 +2543,13 @@ function killEnt(victim, killer, toVoid){
       if (!k.isMonster && k.alive) addGold(k, gold, '击杀' + victim.name);
     }
     if (victim.tier === 'boss'){
-      // ★ 掉落率计算：第 1 层 100%，第 2 层 50%，第 3 层 30%
-      //    无尽模式（第 4 层起）：每 3 层保底 1 次（100%），其余层极小概率（10%）
+      // ★ 掉落率计算：第 1 层 100%，第 2 层 50%，第 3~5 层 30%（常规层）
+      //    第 6 层起（无尽模式）：每 3 层保底 1 次（100%），其余层极小概率（10%）
       const f = G.dungeon.floor;
       let dropRate = 0;
       if (f === 1) dropRate = 1.0;
       else if (f === 2) dropRate = 0.5;
-      else if (f === 3) dropRate = 0.3;
+      else if (f <= 5) dropRate = 0.3;
       else dropRate = (f % 3 === 0) ? 1.0 : 0.1;
 
       if (Math.random() < dropRate){
@@ -2531,6 +2616,16 @@ function killEnt(victim, killer, toVoid){
     if (killer){
       const k = killer.isSummon ? G.players[killer.owner] : killer;
       if (!k.isMonster) k.kills++;
+    }
+    // ★ 若死的是玩家正在手动操控的召唤物，立刻打断操控，否则操控条会挂在死物上
+    if (G.sumCtl && G.sumCtl.s === victim){
+      const st = G.sumCtl;
+      exitSummonCtrl();
+      if (typeof st.done === 'function'){ const f = st.done; st.done = null; setTimeout(f, 0); }
+    }
+    // ★ 召唤物死后立刻重判全队存亡（防止玩家已全灭、最后一只召唤物刚倒下却卡住不结束）
+    if (G.players.length && G.players.filter(liveSide).length === 0){
+      gameOver({over:true, lose:true});
     }
     return;
   }
@@ -2631,6 +2726,12 @@ function consumeAction(p){
     return;
   }
   p.actions = Math.max(0, (p.actions || 0) - 1);
+
+  // ★ 关键：消耗行动点后，如果有凌波插队，立刻挂起当前回合，切给插队者
+  //   行动点已耗尽时不在此处打断，交给 finishTurn 走完整收尾（敕罚结算）后再插队，
+  //   否则会跳过 settleSanctions / actedBans 清理。
+  if (p.actions > 0 && checkInterrupt()) return;
+
   render();
   if (p.actions <= 0){ finishTurn(p); return; }
 }
@@ -2816,6 +2917,20 @@ function takeInsertedTurn(){
   return false;
 }
 
+/* 检查是否有插队请求，如果有则打断当前行动 */
+function checkInterrupt(){
+  if (!G || G.phase !== 'play') return false;
+  // 额外回合本身已经是「插队产物」，不再嵌套打断，交回 runPlayerExtra 统一排队
+  if (G.sub === 'extra') return false;
+  if (G.insertQueue && G.insertQueue.length > 0){
+    if (takeInsertedTurn()){
+      render();
+      return true; // 成功挂起当前行动者，切给插队者
+    }
+  }
+  return false;
+}
+
 function runPlayerExtra(p){
   if (G.phase !== 'play') return;
   if (G.insertQueue && G.insertQueue.length){
@@ -2829,6 +2944,37 @@ function runPlayerExtra(p){
   if (G.insertBase != null){
     const bi = G.insertBase;
     G.turn = bi; G.insertBase = null;
+    // ★ 获取被打断的那个行动者（可能是怪物，也可能是玩家）
+    const prevActor = G.actors[bi];
+    const isMonster = prevActor && prevActor.kind === 'monster';
+    const prevEnt = isMonster ? (G.monsters || []).find(m => m.mid === prevActor.mid) : G.players[bi];
+
+    // ★ 如果他还有剩余行动点，恢复他的回合，让他继续动！
+    if (prevEnt && prevEnt.alive && prevEnt.actions > 0){
+      G.sub = 'main';
+      G.turnEnded = false;
+      if (isMonster) {
+        addLog('—— 插队结束，继续 ' + entLabel(prevEnt) + ' 的回合 ——', 'sys');
+        render();
+        later(() => monsterAct(prevEnt), 380);
+      } else {
+        addLog('—— 插队结束，继续 ' + prevEnt.name + ' 的回合（剩余 ' + prevEnt.actions + ' 行动点）——', 'sys');
+        render();
+        if (prevEnt.isAI) later(() => aiAct(prevEnt), 150);
+      }
+      return;
+    }
+
+    // ★ 怪物被打断时行动点已耗尽：重新进入一次，让它走正常的回合收尾（内部会判 actions<=0）
+    if (isMonster && prevEnt && prevEnt.alive){
+      G.sub = 'main';
+      G.turnEnded = false;
+      render();
+      later(() => monsterAct(prevEnt), 260);
+      return;
+    }
+
+    // 如果他已经没行动点（或者死了），交回给他原本的流程去收尾
     const sav = G.extraLeftSave; G.extraLeftSave = null;
     if (sav && sav.i === bi && G.players[bi] && G.players[bi].alive) G.extraLeft = sav.n;
     p = G.players[bi] || p;
@@ -4105,8 +4251,8 @@ function executeZhixing(p, t){
   applySkillDamage(p, t, roll, {trueDmg:true, ignoreShield:true, dodgeable:true, tag:'遗器·掷星'});
   if (G.phase !== 'play') return;
   if (isPrime(roll)){
-    grantExtraTurn(p, 1, '遗器·掷星 · 质数');
-    addLog('质数 ' + roll + '！' + p.name + ' 立即获得 1 个额外回合。', 'hl');
+    G.extraLeft += 1;   // ★ 改为顺延额度（与蹑景同口径，不再走插队队列）
+    addLog('质数 ' + roll + '！' + p.name + ' 获得 1 个额外回合。', 'hl');
   }
   consumeAction(p);
 }
@@ -4194,7 +4340,8 @@ function consumeResting(s){
   addLog(entLabel(s) + ' 正在休息，本回合无法行动。');
   return true;
 }
-function summonDoAction(s, owner, done){
+/* ★ ap = 这一个回合给多少行动点，默认 2。AI 与人类（⑩御灵面板）口径必须一致 */
+function summonDoAction(s, owner, done, ap){
   const inner = done || function(){};
   summonActCore(s, owner, function(){
     if (s.alive && s.actedBans && s.actedBans.length){
@@ -4202,9 +4349,9 @@ function summonDoAction(s, owner, done){
       s.actedBans = [];
     }
     inner();
-  });
+  }, ap);
 }
-function summonActCore(s, owner, done){
+function summonActCore(s, owner, done, ap){
   done = done || function(){};
   if (!s.alive){ done(); return; }
   const T = SUMMON_TYPES[s.type];
@@ -4220,7 +4367,7 @@ function summonActCore(s, owner, done){
     done(); return;
   }
   // ★ AI 自动执行：本回合 2 点行动点（人类操控由 runOneSummon 分流，不会走到这里）
-  let actionsLeft = 2;
+  let actionsLeft = (ap == null ? 2 : ap);
   const loop = () => {
     if (actionsLeft <= 0 || !s.alive || s.resting){ done(); return; }
     const tgt = summonFindTarget(s);
@@ -4267,12 +4414,20 @@ function runOneSummon(s, owner, done){
       addLog(entLabel(s) + ' 使用蹑景，获得 ' + summonSeal7Extra(owner) + ' 个额外回合！', 'hl');
     }
     let count = 1 + (useSeal7 ? summonSeal7Extra(owner) : 0);
-    const loop = () => { if (count-- <= 0 || !s.alive){ done(); return; } summonDoAction(s, owner, loop); };
+    const loop = () => { if (count-- <= 0 || !s.alive){ done(); return; } summonDoAction(s, owner, loop, 2); };
     loop();
   };
   if (pend > 0){
     let c = pend;
-    const l = () => { if (c-- <= 0 || !s.alive){ runMain(); return; } summonDoAction(s, owner, l); };
+    const l = () => {
+      if (c-- <= 0 || !s.alive){ runMain(); return; }
+      // ★ 额外回合：人类（⑩御灵）与 AI 都给 2 点行动点，只给 1 点会变成「走一步/打一下就结束」
+      if (!owner.isAI && owner.alive && hasSeal(owner, '10')){
+        summonPanel(s, owner, 2, l);
+      } else {
+        summonDoAction(s, owner, l, 2);
+      }
+    };
     l();
   } else runMain();
 }
@@ -4280,6 +4435,14 @@ function runOneSummon(s, owner, done){
    ★ 召唤物手动操控（刻印 ⑩ 御灵）
    ============================================================ */
 function summonPanel(s, owner, actionsLeft, done, forceList){
+  done = done || function(){};
+  // ★ 召唤物已经阵亡（被反伤打死等）：立刻收拾界面并结束，别再弹面板
+  if (!s || !s.alive){
+    exitSummonCtrl();
+    addLog('召唤物已阵亡，行动结束。', 'sys');
+    setTimeout(done, 0);
+    return;
+  }
   const T = SUMMON_TYPES[s.type];
   // 行动点耗尽：直接收尾；休息硬直：交给 summonHumanGo 走 consumeResting（那里才会结算敕罚）
   if (actionsLeft <= 0){ exitSummonCtrl(); done(); return; }
@@ -4452,8 +4615,13 @@ function summonHumanGo(s, owner, choice, actionsLeft, done){
       addLog(entLabel(s) + ' 移动到 (' + s.pos.x + ',' + s.pos.y + ')。');
       actionsLeft--;
     }
-    if (actionsLeft > 0 && !s.resting){ summonPanel(s, owner, actionsLeft, finish); }
-    else { finish(); }
+    // ★ 阵亡 / 行动点耗尽 / 硬直 → 立刻收尾，绝不再弹面板
+    if (!s.alive || actionsLeft <= 0 || s.resting){
+      if (!s.alive) addLog('召唤物已阵亡，行动结束。', 'sys');
+      finish();
+    } else {
+      summonPanel(s, owner, actionsLeft, finish);
+    }
     return;
   }
 
@@ -4469,8 +4637,13 @@ function summonHumanGo(s, owner, choice, actionsLeft, done){
         blackSeal: s.hitSeal || null, greyKey: s.hitGreyKey || null});
       actionsLeft--;
     }
-    if (actionsLeft > 0 && !s.resting){ summonPanel(s, owner, actionsLeft, finish); }
-    else { finish(); }
+    // ★ 被反伤 / 荆棘打死，或行动点耗尽、陷入硬直 → 立刻收尾，绝不再弹面板
+    if (!s.alive || actionsLeft <= 0 || s.resting){
+      if (!s.alive) addLog('召唤物已阵亡，行动结束。', 'sys');
+      finish();
+    } else {
+      summonPanel(s, owner, actionsLeft, finish);
+    }
     return;
   }
 }
@@ -5761,7 +5934,15 @@ function finishMonsterTurn(m){
 }
 
 function monsterAct(m){
-  if (!m || !m.alive || G.phase !== 'play') return;
+  if (!G || G.phase !== 'play') return;
+
+  // ★ 修复：怪物在释放技能前 / 中途被反伤或 AOE 打死时，必须把回合控制权交还出去。
+  // 以前这里直接 return，导致 nextPlayer() 永远不会被调用，整局卡死。
+  // 只有它确实是「当前行动者」时才交还，避免脱离队列的过期回调误推别人的回合。
+  if (!m || !m.alive){
+    if (m && cur() === m) finishMonsterTurn(m);
+    return;
+  }
 
   // ★ 关键修复：确保当前行动者真的是它，防止脱离回合队列的过期回调强行插入行动
   if (cur() !== m) return;
@@ -5815,6 +5996,7 @@ function monsterAct(m){
       m.actions--;
       if (G.phase !== 'play') return;
       settleWin(); if (G.phase !== 'play') return;
+      if (checkInterrupt()) return;   // ★ 检查插队
       later(() => monsterAct(m), 380); return;
     }
     // 后退拉扯
@@ -5827,6 +6009,7 @@ function monsterAct(m){
         m.pos = { x: nx, y: ny };
         m.actions--;
         addLog(entLabel(m) + ' 向后退避，拉开距离。', 'sys');
+        if (checkInterrupt()) return;   // ★ 检查插队
         later(() => monsterAct(m), 380); return;
       }
     }
@@ -5860,6 +6043,7 @@ function monsterAct(m){
       m.actions--;
       if (G.phase !== 'play') return;
       settleWin(); if (G.phase !== 'play') return;
+      if (checkInterrupt()) return;   // ★ 检查插队
       later(() => monsterAct(m), 380); return;
     }
     // 行为：如果贴脸了，尝试后退 1 格
@@ -5872,6 +6056,7 @@ function monsterAct(m){
         m.pos = { x: nx, y: ny };
         m.actions--;
         addLog(entLabel(m) + ' 向后闪避拉开距离。', 'sys');
+        if (checkInterrupt()) return;   // ★ 检查插队
         later(() => monsterAct(m), 380); return;
       }
     }
@@ -5897,6 +6082,7 @@ function monsterAct(m){
     m.actions--;
     if (G.phase !== 'play') return;
     settleWin(); if (G.phase !== 'play') return;
+    if (checkInterrupt()) return;   // ★ 检查插队
     later(() => monsterAct(m), 380);
     return;
   }
@@ -5920,6 +6106,7 @@ function monsterAct(m){
     m.actions--;
     if (G.phase !== 'play') return;
     settleWin(); if (G.phase !== 'play') return;
+    if (checkInterrupt()) return;   // ★ 检查插队
     later(() => monsterAct(m), 380);
     return;
   }
@@ -5939,6 +6126,7 @@ function monsterAct(m){
     }
     m.actions--;
     if (G.phase !== 'play') return;
+    if (checkInterrupt()) return;   // ★ 检查插队
     later(() => monsterAct(m), 380);
     return;
   }
@@ -5964,7 +6152,7 @@ function monsterAct(m){
       dealDamage(t, 5, {trueDmg: true, tag: '引力黑洞'});
     });
     m.actions--;
-    if (G.phase !== 'play') return; settleWin(); if (G.phase !== 'play') return; later(() => monsterAct(m), 380); return;
+    if (G.phase !== 'play') return; settleWin(); if (G.phase !== 'play') return; if (checkInterrupt()) return; later(() => monsterAct(m), 380); return;
   }
 
   // 兽人【碎裂重击】（第 3 层起解锁）
@@ -6008,7 +6196,7 @@ function monsterAct(m){
       addLog('【碎裂重击】' + entLabel(target) + ' 一闪，装备安然无恙。', 'sys');
     }
     m.actions--;
-    if (G.phase !== 'play') return; settleWin(); if (G.phase !== 'play') return; later(() => monsterAct(m), 380); return;
+    if (G.phase !== 'play') return; settleWin(); if (G.phase !== 'play') return; if (checkInterrupt()) return; later(() => monsterAct(m), 380); return;
   }
 
   // 弓手【穿透箭】（全层生效）
@@ -6035,7 +6223,7 @@ function monsterAct(m){
       }
     }
     m.actions--;
-    if (G.phase !== 'play') return; settleWin(); if (G.phase !== 'play') return; later(() => monsterAct(m), 380); return;
+    if (G.phase !== 'play') return; settleWin(); if (G.phase !== 'play') return; if (checkInterrupt()) return; later(() => monsterAct(m), 380); return;
   }
 
   // 普通攻击
@@ -6047,6 +6235,7 @@ function monsterAct(m){
     m.actions--;
     if (G.phase !== 'play') return; settleWin(); if (G.phase !== 'play') return;
     if (!m.alive){ nextPlayer(); return; }
+    if (checkInterrupt()) return;   // ★ 检查插队
     later(() => monsterAct(m), 380);
     return;
   }
@@ -6059,6 +6248,7 @@ function monsterAct(m){
       m.movedThisTurn = true;
       m.actions--;
       addLog(entLabel(m) + ' 向 ' + entLabel(target) + ' 移动 → (' + m.pos.x + ',' + m.pos.y + ')');
+      if (checkInterrupt()) return;   // ★ 检查插队
       render();
       later(() => monsterAct(m), 380);
       return;
@@ -6112,8 +6302,8 @@ function tryDescend(){
 }
 
 function nextFloor(){
-  if (G.dungeon.floor >= 3 && !G.endlessMode) {
-    showChoice('你已击败第 3 层的首领，前方的深渊还在蔓延……', [
+  if (G.dungeon.floor >= 5 && !G.endlessMode) {
+    showChoice('你已击败第 5 层的首领，前方的深渊还在蔓延……', [
       {label:'🌟 带着荣誉离去（通关）', sub:'当前冒险到此结束', run: () => {
         gameOver({over:true, win:true});
       }},
@@ -6137,6 +6327,7 @@ function doNextFloor(){
     p.island = 0; p.room = 0;
     p.pos = { x: 1 + (i % 3), y: 1 + Math.floor(i / 3) };
     p.actions = 2; p.charging = null; p.shopUsed = 0;
+    p.safeRounds = 0;          // ★ 修复：进入新楼层重置深渊侵蚀计时（原来会跨层累计）
   });
   if (G.endlessMode) {
     addLog('【无尽模式】第 ' + nextF + ' 层，怪物属性大幅提升！', 'hl');
@@ -6151,11 +6342,7 @@ function doNextFloor(){
 /* ============================================================
    结算
    ============================================================ */
-function checkWinner(){
-  const alive = G.players.filter(liveSide);
-  if (!alive.length) return {over:true, winner:null, lose:true};
-  return {over:false};
-}
+/* ★ 胜负判定统一由文件上方的 checkWinner() 提供，这里不再重复定义 */
 function gameOver(res){
   res = res || {over:true};
   G.phase = 'over';
@@ -6347,8 +6534,15 @@ function render(){
 function tileAtEvent(e){
   if (!G || !G.dungeon) return null;
   const rect = cv.getBoundingClientRect();
-  const mx = (e.clientX - rect.left) * (MW / rect.width);
-  const my = (e.clientY - rect.top) * (MH / rect.height);
+  // ★ canvas 用 object-fit:contain 撑满外框，实际绘制区域是按 720:620 等比内缩的矩形，
+  //   这里按真实缩放比与留白偏移换算，保证点哪就是哪（外框比例与画布不一致时也不会错位）
+  const sc = Math.min(rect.width / MW, rect.height / MH) || (rect.width / MW);
+  const dw = MW * sc, dh = MH * sc;
+  const left = rect.left + (rect.width - dw) / 2;
+  const top = rect.top + (rect.height - dh) / 2;
+  const mx = (e.clientX - left) / sc;
+  const my = (e.clientY - top) / sc;
+  if (mx < 0 || my < 0 || mx > MW || my > MH) return null;
   const room = G.dungeon.rooms[G.dungeon.currentRoom];
   if (!room) return null;
   const pw = room.w * TILE_PX, ph = room.h * TILE_PX;
@@ -6369,6 +6563,7 @@ function enterSummonCtrl(s, owner, actionsLeft, done){
   const bar = $('sumCtl');
   if (bar) bar.classList.add('on');
   renderSumCtlBar();
+  revealInActZone(bar);
   render();
 }
 function exitSummonCtrl(){
@@ -6397,6 +6592,7 @@ function enterMachineAim(m, owner, isTnt, onFire, onCancel){
   const bar = $('sumCtl');
   if (bar) { bar.classList.add('on'); bar.classList.add('aim'); }
   renderMachineAimBar();
+  revealInActZone(bar);
   render();
 }
 function exitMachineAim(){
@@ -6461,6 +6657,12 @@ function renderSumCtlBar(){
   const st = G.sumCtl;
   if (!st){ box.innerHTML = ''; return; }
   const s = st.s, owner = st.owner, done = st.done, actionsLeft = st.actionsLeft;
+  // ★ 操控中召唤物阵亡：立刻收起操控条，且只回调一次
+  if (!s || !s.alive){
+    exitSummonCtrl();
+    if (typeof done === 'function') setTimeout(done, 0);
+    return;
+  }
   $('scTitle').innerHTML =
     '召唤物行动 · <b style="color:#c4b5fd">' + s.name + '</b>' +
     '（HP ' + Math.max(0, s.hp) + '/' + s.maxHp + ' · ATK ' + summonAtk(s) +
@@ -6630,6 +6832,14 @@ cv.addEventListener('click', e => {
     const sx = Math.floor(room.w/2), sy = Math.floor(room.h/2);
     if (tx === sx && ty === sy){
       if (Math.abs(tx - p.pos.x) + Math.abs(ty - p.pos.y) <= 1) {
+        // ★ 修复：楼梯格上的掉落物原本踩不上去（一点就直接下楼），这里先原地代拾一次
+        const dropKey = p.room + ':' + sx + ':' + sy;
+        if (G.drops[dropKey] && G.drops[dropKey].length){
+          const oldX = p.pos.x, oldY = p.pos.y;
+          p.pos = { x: sx, y: sy };
+          pickup(p);
+          p.pos = { x: oldX, y: oldY };
+        }
         if (room.stairsLocked) addLog('楼梯被封印了，需要击败这里的首领才能解锁。');
         else tryDescend();
       } else {
@@ -6789,6 +6999,18 @@ cv.addEventListener('click', e => {
    选项面板
    ============================================================ */
 let choiceCancel = null;
+/* ★ 按钮区被限高（32vh）后，弹出的面板在下方可能被裁掉——自动把它滚进视野 */
+function revealInActZone(el){
+  const z = $('actZone');
+  if (!z || !el) return;
+  if (z.scrollHeight <= z.clientHeight + 2) return;      // 没溢出就不动
+  setTimeout(() => {
+    const zb = z.getBoundingClientRect(), eb = el.getBoundingClientRect();
+    if (eb.top >= zb.top && eb.bottom <= zb.bottom) return;   // 已经看得见
+    z.scrollTop += (eb.top - zb.top) - 8;
+  }, 0);
+}
+
 function showChoice(title, opts, onCancel){
   choiceCancel = (typeof onCancel === 'function') ? onCancel : null;
   $('cTitle').textContent = title;
@@ -6809,10 +7031,17 @@ function showChoice(title, opts, onCancel){
   box.appendChild(c);
   $('choice').classList.add('on');
   setChoosing(true);
+  revealInActZone($('choice'));
 }
 function hideChoice(){
   $('choice').classList.remove('on');
   setChoosing(false);
+  // ★ 关掉面板后把视野还回去：操控条还在就对准它，否则滚回按钮顶部
+  const z = $('actZone'), bar = $('sumCtl');
+  if (z){
+    if (bar && bar.classList.contains('on')) revealInActZone(bar);
+    else z.scrollTop = 0;
+  }
 }
 function dropChoiceCancel(){ choiceCancel = null; }
 function clickCancel(){
@@ -7061,12 +7290,8 @@ document.addEventListener('keydown', e => {
 $('forceEndBtn').onclick = () => {
   if (!G || G.phase !== 'play') return;
   hideChoice();
-  const w = checkWinner();
-  if (w.over){ gameOver(w); return; }
-  const alive = G.players.filter(p=>p.alive);
-  const best = alive.slice().sort((a,b)=>
-    (b.hp / b.maxHp) - (a.hp / a.maxHp) || b.kills - a.kills || b.hp - a.hp)[0];
-  gameOver({over:true, winner: best || null, forced:true});
+  // ★ 直接判定为失败 / 结束，不再计算胜者
+  gameOver({over:true, lose:true});
 };
 
 /* 返回主页面（两次确认） */
@@ -7127,6 +7352,11 @@ function loop(){
 loop();
 
 /* ===== 地图函数 ===== */
+/* ★ 十六进制色 → rgba()：提到全局，避免每次绘帧都重新创建函数对象 */
+function hexToRgba(hex, a){
+  const r = parseInt(hex.slice(1,3), 16), g = parseInt(hex.slice(3,5), 16), b = parseInt(hex.slice(5,7), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
 /* ============================================================
    地下城绘制（画当前房间 + 小地图）
    ============================================================ */
@@ -7146,10 +7376,6 @@ function drawDungeon(){
 
   // 房间底色 + 类型主题色
   const themeCol = ROOM_TYPES[room.type].color;
-  const hexToRgba = (hex, a) => {
-    const r = parseInt(hex.slice(1,3), 16), g = parseInt(hex.slice(3,5), 16), b = parseInt(hex.slice(5,7), 16);
-    return `rgba(${r},${g},${b},${a})`;
-  };
   ctx.fillStyle = '#2a2a4e'; 
   ctx.fillRect(ox, oy, pw, ph);
   ctx.fillStyle = hexToRgba(themeCol, 0.10); // 极淡的主题色
