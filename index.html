@@ -174,6 +174,19 @@ body.choosing #cOpts{max-height:48vh;overflow-y:auto;overscroll-behavior:contain
   border-color:var(--btn-off-line);background:var(--btn-off-bg);color:var(--btn-off-txt);
 }
 .opt .sub{font-size:10px;color:var(--dim);display:block;margin-top:1px}
+/* 沧溟【分配】的数值输入区：三行（回复 / 护盾 / 伤害），每行一个数字框 + ± 微调 */
+.allocrows{display:flex;flex-direction:column;gap:6px;width:100%;margin-bottom:8px}
+.allocrow{
+  display:flex;align-items:center;gap:7px;padding:4px 10px;border-radius:9px;
+  border:1px solid var(--line);background:rgba(255,255,255,.03);
+}
+.allocrow .alab{font-size:12.5px;color:var(--text);flex:1 1 auto;min-width:0;cursor:help}
+.allocrow input[type=number]{width:64px;flex:none;padding:5px 6px;font-size:13px;text-align:center}
+.allocrow .sbtn{
+  flex:none;width:28px;height:28px;line-height:1;border-radius:8px;cursor:pointer;font-family:inherit;
+  font-size:15px;border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--text);transition:.15s;
+}
+.allocrow .sbtn:hover{background:rgba(77,245,222,.16);border-color:rgba(77,245,222,.5);color:var(--cyan)}
 .cancel{
   margin-left:6px;background:none;border:none;color:#6b7899;cursor:pointer;font-size:12px;font-family:inherit;
 }
@@ -550,7 +563,8 @@ input[type=number],input[type=text]{
            回合顺序：<b>玩家全动 → 怪物全动</b>（首轮玩家先手）。</p>
         <div class="rsec">房间与距离</div>
         <p>房间内是 7×7（入口 5×5，BOSS 房 9×9）的格子。<b>同房间才可攻击</b>。<br>
-           走 1 格 = 1 行动点（可一次走 2 格）。站在<b>门格</b>上可花 1 行动点进入相邻房间。</p>
+           走 1 格 = 1 行动点（可一次走 2 格；持 ⑥b <b>天工</b> 则同房间任意格都能一次走到）。站在<b>门格</b>上可花 1 行动点进入相邻房间。<br>
+           宝箱 / 祭坛 / 商店需<b>相邻</b>才能交互；持 ⑥b <b>天工</b> 则同房间内点哪都行（掉落物也可隔空拾取，消耗 1 行动点）。</p>
         <div class="rsec">BOSS 锁血</div>
         <p>BOSS 有 <b>2 段血</b>（第 1 层）或 <b>3 段血</b>（第 2 层起）。每段之间有锁血线，任何扣血（伤害、斩杀、均分）都<b>不能把 BOSS 打到当前段底以下</b>。<br>
            锁血时：<b>清空 BOSS 全部负面状态</b>（【黑】保留）、阶段增益（P2 ATK+2，P3 ATK+4、行动点+1）。</p>
@@ -572,9 +586,9 @@ input[type=number],input[type=text]{
         <details class="faq"><summary>为什么我走不了？</summary><p>检查是否：① 行动点用完了（每回合 2 点）；② 被戒律「禁止移动」；③ 中了【黄】（喝药水解）；④ 被 ⑨b 撕裂把 DEF 压到负数（等一回合 / 用【灰】解）。</p></details>
         <details class="faq"><summary>怎么换房？</summary><p>走到房间边缘的<b>门格</b>（绿色方框），再点「移动」，会出现「进入 XX 房」选项。</p></details>
         <details class="faq"><summary>能不能攻击隔壁房间的怪？</summary><p>不能。所有攻击必须同房间。</p></details>
-        <details class="faq"><summary>怎么手动操控召唤物？</summary><p>需要 ⑩<b>御灵</b>。拿到后，轮到你自己的召唤物行动时会进入<b>地图操控模式</b>：地图上会亮起<b>紫色格</b>（本回合可达，最多 2 格）和<b>红框敌人</b>（射程内可打），<b>直接点格子移动、点敌人攻击</b>。操控条上还有<b>待机 / 自动行动 / ⚡蹑景</b>（额外回合）与<b>命中效果</b>（⑪ 点染的颜色，随你当前的 ⑪/11b 变化）；点「列表操作」可切回按钮列表，小屏更顺手。<br>没有 ⑩ 御灵时，无论人类还是 AI，召唤物都<b>只能自动索敌</b>，不会进入操控模式。</p></details>
+        <details class="faq"><summary>怎么手动操控召唤物？</summary><p>需要 ⑩<b>御灵</b>。拿到后，轮到你自己的召唤物行动时会进入<b>地图操控模式</b>：地图上会亮起<b>紫色格</b>（本回合可达，最多 2 格；主人同时持 ⑩御灵 + ⑥b 天工时是全房间）和<b>红框敌人</b>（射程内可打），<b>直接点格子移动、点敌人攻击</b>。操控条上还有<b>待机 / 自动行动 / ⚡蹑景</b>（额外回合）与<b>命中效果</b>（⑪ 点染的颜色，随你当前的 ⑪/11b 变化）；点「列表操作」可切回按钮列表，小屏更顺手。<br>没有 ⑩ 御灵时，无论人类还是 AI，召唤物都<b>只能自动索敌</b>，不会进入操控模式。</p></details>
         <details class="faq"><summary>可以打队友吗？</summary><p>可以，攻击列表里队友会标注「（队友）」。这不算叛变——用来帮队友解掉【蓝】（下次受击前无法攻击）或【白】，但伤害是真的，请注意别打死人。</p></details>
-        <details class="faq"><summary>宝物怎么拿？</summary><p>走到宝箱<b>相邻格</b>，点「开箱」。</p></details>
+        <details class="faq"><summary>宝物怎么拿？</summary><p>走到宝箱<b>相邻格</b>，点「开箱」（持 ⑥b 天工则房间内任意宝箱直接点开，无需走近）。</p></details>
       </div>
     </div>
     <button class="big" id="rulesCloseBtn">关闭</button>
@@ -1234,8 +1248,8 @@ const SEAL_EXTRA = {
            const base = 'N = 分支①当前层数（' + a + '）';
            return b > 0 ? base + '<br>⚠ 你已经持有 ' + b + ' 层分支② —— <b>分支②只是开关，叠层没有收益</b>' : base; }},
   '6b': {name:'天工·分支',
-         desc:'行动无视距离：移动可去任意房间；攻击射程无限（ATK 不变）',
-         sub: p => '已生效：移动可去任意房间 · 攻击射程 ∞'},
+         desc:'行动与交互无视距离：同一房间内移动可去任意格（换房仍走门）；开箱 / 拾取掉落物 / 祭坛 / 商店交互无需走近；攻击射程无限（ATK 不变）',
+         sub: p => '已生效：房间内任意格都能走到 · 开箱 / 拾取 / 祭坛 / 商店无需靠近 · 攻击射程 ∞'},
   '9b': {name:'裂帛·分支',
          desc:'主动技（主要行动 · 归【刻印】戒律）：对任一存活实体施加 1 层【撕裂】，随即结算其全部撕裂层数。你施加的【撕裂】每层令目标 DEF −1；DEF < 0 时该实体无法移动',
          sub: p => '结算量 = 层数 × (1 + 承受者自己的【尘】) 真实伤害'},
@@ -3267,9 +3281,11 @@ function grantSummonExtraTurn(s, n, src){
   }
 }
 
-function pickup(p){
+function pickup(p, tx, ty){
   if (!p || !p.bag || !p.pos) return;
-  const key = p.room + ':' + p.pos.x + ':' + p.pos.y;
+  const gx = (tx === undefined) ? p.pos.x : tx;
+  const gy = (ty === undefined) ? p.pos.y : ty;
+  const key = p.room + ':' + gx + ':' + gy;
   const list = G.drops[key];
   if (!list || !list.length) return;
   const seals = list.filter(it => it.id === 'seal');
@@ -3343,6 +3359,12 @@ function moveLockReason(e){
 function reachableTiles(p, maxSteps){
   const room = G.dungeon.rooms[p.room];
   if (!room) return [];
+  // ★ ⑥b 天工「行动无视距离」：同一房间内任意可站立格都能一次走到
+  //   （御灵操控的召唤物：主人同时持 ⑩ 与 ⑥b 时同样任意移动，与 summonCanStep 口径一致）
+  const wide = hasSeal(p, '6b') ||
+    (p && p.isSummon && p.owner != null && G.players[p.owner] &&
+     hasSeal(G.players[p.owner], '10') && hasSeal(G.players[p.owner], '6b'));
+  if (wide) maxSteps = room.w + room.h;
   const out = [];
   const start = p.pos;
   for (let dx = -maxSteps; dx <= maxSteps; dx++){
@@ -3368,7 +3390,8 @@ function actMove(p){
   if (moveLocked(p)){
     addLog(p.name + ' 无法移动（' + moveLockReason(p) + '）。'); render(); return;
   }
-  addLog('【操作提示】请直接在地图上点击发光的格子进行移动（最多 2 格）。', 'sys');
+  addLog('【操作提示】请直接在地图上点击发光的格子进行移动（' +
+         (hasSeal(p, '6b') ? '天工·无视距离，房间内任意格' : '最多 2 格') + '）。', 'sys');
   // 给个视觉反馈，让玩家注意到高亮
   floatText(MW/2, MH-40, '点击发光格移动', '#38f0d8');
 }
@@ -4255,7 +4278,7 @@ function cangmingTargets(p){
 }
 function cangmingAllocUI(p, pts, targets, alloc, title, onFinish, onCancel){
   const keyOf = t => t.isSummon ? 's' + t.sid : (t.isMonster ? 'm' + t.mid : 'p' + t.i);
-  const usedOf = t => { const a = alloc[keyOf(t)]; return a ? a.heal + a.shield + a.dmg : 0; };
+  const usedOf = t => { const a = alloc[keyOf(t)]; return a ? (a.heal||0) + (a.shield||0) + (a.dmg||0) : 0; };
   const leftAll = () => pts - targets.reduce((s,t) => s + usedOf(t), 0);
   const mainPanel = () => {
     const opts = targets.map(t => {
@@ -4270,23 +4293,73 @@ function cangmingAllocUI(p, pts, targets, alloc, title, onFinish, onCancel){
     opts.push({label: '确认释放（剩余 ' + leftAll() + ' 点浪费）', run: () => onFinish(alloc)});
     showChoice(title, opts, onCancel);
   };
+  /* ── 单实体分配面板 ──
+     点数动辄十几点，只能一下一下点「+1」手要废。改成每项一个数字框，
+     直接填想要的数（夹在 0 ~ 公共剩余 + 自己已占用），± 留作微调。
+     「剩余」是全队共享的池子：给 A 填了 3 点，B 那边能填的上限就少 3 点。 */
+  const CM_ROWS = [
+    ['heal',   '回复',        '恢复目标 HP（不超过上限）'],
+    ['shield', '护盾',        '为目标添加护盾（优先于 HP 扣减）'],
+    ['dmg',    '伤害（真实）', '真实伤害（无视 DEF 与护盾，受【尘】减伤）· 不走命中环节，不可被闪避 · 属「技能」，不暴击']
+  ];
   const allocMenu = (t) => {
     const key = keyOf(t);
-    const a = alloc[key] || {heal:0, shield:0, dmg:0};
-    const opt = (label, k, sub) => ({
-      label, sub,
-      run: () => {
-        if (leftAll() <= 0){ allocMenu(t); return; }
-        a[k]++; alloc[key] = a; allocMenu(t);
-      }
-    });
-    showChoice('分配给 ' + entLabel(t) + '（剩余 ' + leftAll() + ' 点）', [
-      opt('回复 +1', 'heal', '恢复目标 HP'),
-      opt('护盾 +1', 'shield', '为目标添加护盾'),
-      opt('伤害 +1（真实）', 'dmg', '真实伤害（无视 DEF 与护盾，受【尘】减伤）'),
-      {label: '重置', run: () => { delete alloc[key]; allocMenu(t); }},
+    const a = alloc[key] || (alloc[key] = {heal:0, shield:0, dmg:0});
+    const titleOf = () => '分配给 ' + entLabel(t) + '（剩余 ' + leftAll() + ' 点 · 数字可直接输入）';
+    showChoice(titleOf(), [
+      {label: '重置', sub: '清除对该实体的分配',
+        run: () => { delete alloc[key]; allocMenu(t); }},
       {label: '← 返回', run: () => mainPanel()}
     ], onCancel);
+    const box = $('cOpts');
+    if (!box) return;                       // 无 DOM 的环境（纯逻辑测试）跳过输入区，分配逻辑照旧
+    const wrap = document.createElement('div');
+    wrap.className = 'allocrows';
+    const syncs = [];
+    /* 某一项当前最多能填多少：公共剩余 + 它自己已占用的部分 */
+    const capOf = k => leftAll() + (a[k] || 0);
+    const setVal = (k, v) => {
+      const n = Math.max(0, Math.min(capOf(k), Math.floor(Number(v) || 0)));
+      a[k] = n;
+      return n;
+    };
+    const syncAll = (skip) => {
+      $('cTitle').textContent = titleOf();
+      syncs.forEach(s => { if (s.el !== skip) s.fn(); });
+    };
+    const mk = (k, txt, delta, aria) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'sbtn'; b.textContent = txt;
+      b.setAttribute('aria-label', aria);
+      b.onclick = () => { setVal(k, (a[k] || 0) + delta); syncAll(); };
+      return b;
+    };
+    CM_ROWS.forEach(([k, name, tip]) => {
+      const row = document.createElement('div');
+      row.className = 'allocrow';
+      const lab = document.createElement('span');
+      lab.className = 'alab'; lab.textContent = name; lab.title = tip;
+      const inp = document.createElement('input');
+      inp.type = 'number'; inp.min = '0'; inp.step = '1'; inp.inputMode = 'numeric';
+      inp.setAttribute('aria-label', name + '分配点数');
+      const show = () => { inp.value = String(a[k] || 0); inp.max = String(capOf(k)); };
+      /* 输入过程中不改写输入框（否则光标会跳），只在合法范围内实时入账；
+         失焦 / 回车时再夹一次，保证越界的输入会被拉回上限 */
+      inp.oninput = () => {
+        const v = parseInt(inp.value, 10);
+        if (Number.isFinite(v) && v >= 0 && v <= capOf(k)){ setVal(k, v); syncAll(inp); }
+      };
+      inp.onblur = () => { setVal(k, inp.value); syncAll(); };
+      inp.onkeydown = ev => { if (ev.key === 'Enter'){ setVal(k, inp.value); syncAll(); } };
+      show();
+      row.appendChild(lab);
+      row.appendChild(mk(k, '−', -1, name + ' 减 1'));
+      row.appendChild(inp);
+      row.appendChild(mk(k, '+', 1, name + ' 加 1'));
+      wrap.appendChild(row);
+      syncs.push({el: inp, fn: show});
+    });
+    box.insertBefore(wrap, box.firstChild);
   };
   mainPanel();
 }
@@ -4753,9 +4826,10 @@ function summonPanel(s, owner, actionsLeft, done, forceList){
     }));
 
   if (!moveLocked(s)){
+    const wideMove = hasSeal(owner, '10') && hasSeal(owner, '6b');
     reachableTiles(s, 2).forEach(t => opts.push({
       label:'移动到 (' + t.x + ',' + t.y + ')',
-      sub:'消耗 1 点行动点（最多 2 格）',
+      sub:'消耗 1 点行动点（' + (wideMove ? '房间内任意格' : '最多 2 格') + '）',
       run: () => { summonHumanGo(s, owner, {act:'move', pos:t}, actionsLeft, done); }
     }));
   } else {
@@ -5183,11 +5257,21 @@ function fireMachine(m, done){
 /* ============================================================
    开箱 / 物品使用
    ============================================================ */
-function doOpenBox(p, autoPick){
+function doOpenBox(p, autoPick, chest){
   const room = G.dungeon.rooms[p.room];
   if (!room) return false;
   if (!p.pos) return false;
-  const near = room.chests.find(c => !c.opened && Math.abs(c.x - p.pos.x) + Math.abs(c.y - p.pos.y) <= 1);
+  // ⑥b 天工：交互无视距离——同房间任意宝箱都能开；否则需站在相邻格
+  let near = (chest && !chest.opened) ? chest : null;
+  if (!near){
+    const cands = room.chests.filter(c => !c.opened && (hasSeal(p, '6b') ||
+      Math.abs(c.x - p.pos.x) + Math.abs(c.y - p.pos.y) <= 1));
+    if (cands.length){
+      cands.sort((a, b) => (Math.abs(a.x - p.pos.x) + Math.abs(a.y - p.pos.y))
+                         - (Math.abs(b.x - p.pos.x) + Math.abs(b.y - p.pos.y)));
+      near = cands[0];
+    }
+  }
   if (!near){ addLog('附近没有宝箱。'); return false; }
   if (near.locked){ addLog('这个宝箱上锁了。'); return false; }
   near.opened = true;
@@ -5261,8 +5345,9 @@ function actBox(p){
   if (hasBan(p, 'box')){ addLog('被戒律「禁止开箱」限制。'); render(); return; }
   const room = G.dungeon.rooms[p.room];
   if (!room){ render(); return; }
-  const near = room.chests.find(c => !c.opened && Math.abs(c.x - p.pos.x) + Math.abs(c.y - p.pos.y) <= 1);
-  if (!near){ addLog('附近没有宝箱（需相邻格）。'); render(); return; }
+  const near = room.chests.find(c => !c.opened && (hasSeal(p, '6b') ||
+    Math.abs(c.x - p.pos.x) + Math.abs(c.y - p.pos.y) <= 1));
+  if (!near){ addLog(hasSeal(p, '6b') ? '这个房间没有未开的宝箱。' : '附近没有宝箱（需相邻格）。'); render(); return; }
   doOpenBox(p);
 }
 
@@ -7087,7 +7172,8 @@ function summonCtrlClick(x, y){
   }
   if (tgt){
     addLog('（' + entLabel(tgt) + ' 站在那格上，无法落脚。）', 'sys');
-  } else if (Math.abs(x - s.pos.x) + Math.abs(y - s.pos.y) > 2){
+  } else if (Math.abs(x - s.pos.x) + Math.abs(y - s.pos.y) > 2 &&
+             !(hasSeal(owner, '10') && hasSeal(owner, '6b'))){
     addLog('超出本回合的移动范围（最多 2 格）。', 'sys');
   } else {
     addLog('那个位置被挡住了，走不过去。', 'sys');
@@ -7189,8 +7275,8 @@ cv.addEventListener('click', e => {
 
   if (room.type === 'altar'){
     const ax = Math.floor(room.w/2), ay = Math.floor(room.h/2);
-    // ★ 只有点正中心这 1 格，并且你已经在它相邻格时，才触发交互
-    if (tx === ax && ty === ay && Math.abs(tx - p.pos.x) + Math.abs(ty - p.pos.y) <= 1){
+    // ★ 只有点正中心这 1 格才触发交互；⑥b 天工无视距离，站多远都能交互
+    if (tx === ax && ty === ay && (hasSeal(p, '6b') || Math.abs(tx - p.pos.x) + Math.abs(ty - p.pos.y) <= 1)){
       const deadAllies = G.players.filter(q => !q.alive);
       const opts = [];
 
@@ -7282,7 +7368,7 @@ cv.addEventListener('click', e => {
   if (room.type === 'shop'){
     const sx = Math.floor(room.w/2), sy = Math.floor(room.h/2);
     if (tx === sx && ty === sy){
-      if (Math.abs(tx - p.pos.x) + Math.abs(ty - p.pos.y) <= 1) {
+      if (hasSeal(p, '6b') || Math.abs(tx - p.pos.x) + Math.abs(ty - p.pos.y) <= 1) {
         shopMenu(p, false);
       } else {
         addLog('请走到商人旁边。');
@@ -7291,15 +7377,28 @@ cv.addEventListener('click', e => {
     }
   }
 
-  // 2. 点击了宝箱 -> 开箱
+  // 2. 点击了宝箱 -> 开箱（⑥b 天工无视距离，房间内任意宝箱直接开）
   const chest = room.chests.find(c => c.x === tx && c.y === ty && !c.opened);
   if (chest){
-    if (Math.abs(tx - p.pos.x) + Math.abs(ty - p.pos.y) <= 1){
-      doOpenBox(p);
+    if (hasSeal(p, '6b') || Math.abs(tx - p.pos.x) + Math.abs(ty - p.pos.y) <= 1){
+      doOpenBox(p, false, chest);
     } else {
       addLog('宝箱太远了，请先走到它相邻的格子。');
     }
     return;
+  }
+
+  // 2.5 ⑥b 天工：点击有掉落物的格子直接远程拾取（消耗 1 行动点，无需走过去）
+  if (hasSeal(p, '6b') && !(tx === p.pos.x && ty === p.pos.y)){
+    const dkey = p.room + ':' + tx + ':' + ty;
+    if (G.drops[dkey] && G.drops[dkey].length){
+      floatText(entityPixel({ room: p.room, pos: {x: tx, y: ty} }).x,
+                entityPixel({ room: p.room, pos: {x: tx, y: ty} }).y - 30, '隔空拾取', '#4df5de');
+      pickup(p, tx, ty);
+      consumeAction(p);
+      render();
+      return;
+    }
   }
 
   // 3. 点击了门格（且玩家已经站在门格上）-> 换房
@@ -7325,7 +7424,8 @@ cv.addEventListener('click', e => {
   if (target) {
     moveToTile(p, tx, ty);
   } else {
-    if (Math.abs(tx - p.pos.x) + Math.abs(ty - p.pos.y) > 2) {
+    const far = Math.abs(tx - p.pos.x) + Math.abs(ty - p.pos.y) > 2;
+    if (far && !hasSeal(p, '6b')) {
       addLog('太远了（每回合最多移动 2 格）。');
     } else {
       addLog('那个位置被挡住了，走不过去。');
