@@ -546,7 +546,7 @@ input[type=number],input[type=text]{
         <div class="rsec">回合与行动点</div>
         <p>每回合 <b>2 点行动点</b>。移动 / 攻击 / 开箱 / 技能 / 道具 各占 1 点；附魔、敕禁、商店不占点。<br>
            八项刻印主动技（蹑景 / 裂帛 / 残锋 / 点染 / 御灵召唤 / 蓄闪 / 敕禁 / 天工）统一收在<b>「刻印技能」</b>按钮里，<br>
-           缺刻印或条件不满足的项会置灰、不可点。其中<b>裂帛、御灵召唤在额外回合里同样可发动</b>（不再限主要行动）。<br>
+           缺刻印或条件不满足的项会置灰、不可点。其中<b>裂帛、御灵召唤在额外回合里同样可发动</b>。<br>
            回合顺序：<b>玩家全动 → 怪物全动</b>（首轮玩家先手）。</p>
         <div class="rsec">房间与距离</div>
         <p>房间内是 7×7（入口 5×5，BOSS 房 9×9）的格子。<b>同房间才可攻击</b>。<br>
@@ -555,7 +555,7 @@ input[type=number],input[type=text]{
         <p>BOSS 有 <b>2 段血</b>（第 1 层）或 <b>3 段血</b>（第 2 层起）。每段之间有锁血线，任何扣血（伤害、斩杀、均分）都<b>不能把 BOSS 打到当前段底以下</b>。<br>
            锁血时：<b>清空 BOSS 全部负面状态</b>（【黑】保留）、阶段增益（P2 ATK+2，P3 ATK+4、行动点+1）。</p>
         <div class="rsec">遗器对 BOSS</div>
-        <p>斩月【斩杀】对任何目标均可使用；忘川【均分】一视同仁。但任何导致血量降至当前阶段底线的伤害，都会触发【锁血】强制锁血并清空负面状态，需多次攻击才能彻底击杀 BOSS。<br>
+        <p>斩月【斩杀】对任何目标均可使用；忘川【均分】一视同仁。但任何导致血量降至当前阶段底线的伤害，都只会触发【锁血】（不清空 BOSS 自身负面），需多次攻击才能彻底击杀 BOSS。<br>
            其余 3 件（沧溟 / 七弦 / 掷星）对 BOSS 表现不变。</p>
         <div class="rsec">精英怪</div>
         <p>每层保底 1 个精英房：第 1 层为兽人 / 渊火咒术师，第 2 层起三者混出。<br>
@@ -613,7 +613,7 @@ const ITEMS = {
   yq_qixian:  {name:'七弦', icon:'\u{1F3B5}', type:'weapon', atk:0, noAtk:true, ench:true, yiqi:2,
     desc:'遗器 · 无普通攻击 · 可附魔。主动技「连射」：全场任意实体连续 7 次 ×1 真实伤害（无视 DEF / 护盾，受【尘】减伤）；每一发走命中环节、可被闪避'},
   yq_zhanyue: {name:'斩月', icon:'\u{1F319}', type:'weapon', atk:11, rng:Infinity, ranged:true, charge:true, ench:true, yiqi:3,
-    desc:'遗器 · 近战 ATK+11 / 蓄力 1 回合后远程释放，射程∞。主动技「斩杀」：满血时选一名目标直接死亡（对精英 ≤50%、BOSS ≤25%），代价是自己 HP 减半'},
+    desc:'遗器 · 近战 ATK+11 / 蓄力 1 回合后远程释放，射程∞。主动技「斩杀」：满血时选一名目标直接死亡（精英与召唤物直接死亡；对 BOSS 受锁血限制——压到当前阶段底线即触发锁血，最终阶段才可击杀），代价是自己 HP 减半'},
   yq_wangchuan:{name:'忘川', icon:'\u{1F480}', type:'weapon', atk:0, noAtk:true, ench:true, yiqi:4,
     desc:'遗器 · 无普通攻击。被动「不死」：只有 HP 恰好为 0 才死亡，负 HP 仍存活。主动技「均分」：选至少 2 个实体，把它们的 HP 加总后均分（BOSS 结果不低于 maxHp × 30%）'},
   yq_zhixing: {name:'掷星', icon:'\u{1F320}', type:'weapon', atk:0, noAtk:true, ench:true, yiqi:5,
@@ -2325,8 +2325,8 @@ function onBossLock(t, floor){
           equipAuto(e);
           t.swallowed.push(swallowed);
           addLog('【千眼吞噬】' + entLabel(t) + ' 吞噬了 ' + entLabel(e) + ' 的【' + ITEMS[swallowed.id].name + '】！', 'kill');
-          // 忘川离手判死
-          if (wasWangchuan && e.alive && e.hp <= 0){
+          // 忘川离手判死（身上还有另一件忘川则继续以负血存活）
+          if (wasWangchuan && e.alive && e.hp <= 0 && !hasArtifact(e, 'yq_wangchuan')){
             addLog('失去【忘川】，' + e.name + ' 当场阵亡！', 'kill');
             killEnt(e, t, false);
             settleWin();
@@ -5345,12 +5345,19 @@ function doDropItem(p, uid){
   const inst = itemOf(p, uid);
   if (!inst) return;
   const d = ITEMS[inst.id];
+  const wasWangchuan = (inst.id === 'yq_wangchuan');
   if (p.weapon === uid) p.weapon = null;
   if (p.charging === uid) p.charging = null;
   removeUid(p, uid);
   delete p.ench[uid];
   equipAuto(p);
   addLog(p.name + ' 丢弃了 ' + d.icon + ' ' + d.name + '（已摧毁，不会出现在地上）。', 'sys');
+  // ★ 忘川离手判死（与卖出同口径；身上还有另一件忘川则继续以负血存活）
+  if (wasWangchuan && p.alive && p.hp <= 0 && !hasArtifact(p, 'yq_wangchuan')){
+    addLog('失去【忘川】，' + p.name + ' HP 为 ' + p.hp + '，当场阵亡。', 'kill');
+    killEnt(p, null, false);
+    settleWin();
+  }
   render();
 }
 function dropSealMenu(p){
@@ -5366,7 +5373,7 @@ function dropSealMenu(p){
       sub: '⚠ 永久删除' + (subs.length ? '，并连带分支 ' + subs.map(sealDisplayName).join('、') : ''),
       run: () => {
         showChoice('确认丢弃【' + sealDisplayName(id) + '】？', [
-          {label:'✅ 确认丢弃', sub:'不可撤销 · 触发与卖出相同的清算', run: () => {
+          {label:'✅ 确认丢弃', sub: n > 1 ? '层数 -1，剩余层继续生效' : '永久移除 · 不可撤销', run: () => {
             doDropSeal(p, id);
             if (Object.keys(p.seals).some(k => (p.seals[k] || 0) > 0)) dropSealMenu(p);
             else { hideChoice(); render(); }
@@ -5380,8 +5387,12 @@ function dropSealMenu(p){
   showChoice('丢弃哪个刻印？（确认后永久移除）', opts, () => render());
 }
 function doDropSeal(p, id){
-  const removed = removeSealPermanently(p, id, '丢弃');
-  addLog(p.name + ' 丢弃了刻印【' + sealDisplayName(id) + '】（已永久移除：' + removed.map(sealDisplayName).join('、') + '）。', 'sys');
+  const res = removeSealPermanently(p, id, '丢弃');
+  if (res.layerOnly){
+    addLog(p.name + ' 丢弃了刻印【' + sealDisplayName(id) + '】的一层（剩余 ' + (p.seals[id] || 0) + ' 层继续生效）。', 'sys');
+  } else {
+    addLog(p.name + ' 丢弃了刻印【' + sealDisplayName(id) + '】（已永久移除：' + res.removed.map(sealDisplayName).join('、') + '）。', 'sys');
+  }
   render();
 }
 
@@ -5624,7 +5635,7 @@ function sellArtifact(p, uid){
   removeUid(p, uid);
   addGold(p, price, '卖出遗器');
   equipAuto(p);
-  if (wasWangchuan && p.alive && p.hp <= 0){
+  if (wasWangchuan && p.alive && p.hp <= 0 && !hasArtifact(p, 'yq_wangchuan')){
     addLog('忘川离手，' + p.name + ' HP 为 ' + p.hp + '，当场阵亡。', 'kill');
     killEnt(p, null, false);
     settleWin();
@@ -5633,8 +5644,16 @@ function sellArtifact(p, uid){
 }
 function sealSalePrice(id, p){ return SHOP_PRICE.seal; }
 /* 刻印的永久移除（卖出 / 丢弃共用）：先清算、再删数据、补特殊清理。
-   返回被删掉的键列表（基础项 + 连带分支）。 */
+   返回 { removed, layerOnly }：removed 为被删掉的键列表（基础项 + 连带分支）；
+   layerOnly = true 表示该刻印有多层、只移除了 1 层（效果与分支均保留，不做清算）。 */
 function removeSealPermanently(p, id, reason){
+  // ★ 同一刻印拿了两层（①③⑦⑧a⑧b 可叠加）：丢弃/卖出只减 1 层，剩余层数继续生效
+  if ((p.seals[id] || 0) > 1){
+    p.seals[id]--;
+    addLog('【' + sealDisplayName(id) + '】层数 ' + (p.seals[id] + 1) + ' → ' + p.seals[id] +
+           '（剩余层数继续生效，不触发清算）。', 'sys');
+    return { removed: [id], layerOnly: true };
+  }
   const isBase = !!SEAL_BY_ID[id];
   const br = isBase ? sealBranchOf(id) : null;
   onSealBlackened(p, id);
@@ -5655,7 +5674,7 @@ function removeSealPermanently(p, id, reason){
     recheckWin(entLabel(p) + ' 的【御灵】被' + (reason || '移除') + '。');
   }
   if (id === '2' || id === '2b') p.shareTarget = -1;
-  return removed;
+  return { removed: removed, layerOnly: false };
 }
 function sellSeal(p, id){
   const isBase = !!SEAL_BY_ID[id];
@@ -5663,12 +5682,17 @@ function sellSeal(p, id){
   const owned = (p.seals[id] > 0) ||
                 (br ? br.subs.some(s => p.seals[s] > 0) : false);
   if (!owned){ addLog('没有【' + sealDisplayName(id) + '】可卖。', 'sys'); return false; }
-  const removed = removeSealPermanently(p, id, '卖出');
+  const res = removeSealPermanently(p, id, '卖出');
   const price = sealSalePrice(id);
   addGold(p, price, '卖出刻印');
-  addLog(p.name + ' 把刻印【' + sealDisplayName(id) + '】卖给商店，获得 ' + price + ' 金币。' +
-         '刻印已<b>永久移除</b>（' + removed.map(sealDisplayName).join('、') + '），' +
-         '黑化式的即时清算已生效且不回滚。', 'hl');
+  if (res.layerOnly){
+    addLog(p.name + ' 把刻印【' + sealDisplayName(id) + '】的一层卖给商店，获得 ' + price + ' 金币（剩余 ' +
+           (p.seals[id] || 0) + ' 层继续生效）。', 'hl');
+  } else {
+    addLog(p.name + ' 把刻印【' + sealDisplayName(id) + '】卖给商店，获得 ' + price + ' 金币。' +
+           '刻印已<b>永久移除</b>（' + res.removed.map(sealDisplayName).join('、') + '），' +
+           '黑化式的即时清算已生效且不回滚。', 'hl');
+  }
   return true;
 }
 function shopOpen(p){ return !!p && hasSeal(p, '13b') && !hasBan(p, 'seal'); }
@@ -6481,9 +6505,21 @@ function monsterAct(m){
         removeUid(target, armors[0].uid);
         addLog('💥 ' + entLabel(target) + ' 的【护甲】被击碎了！', 'kill');
       } else if (weapons.length > 0) {
-        removeUid(target, weapons[0].uid);
+        const broken = weapons[0];
+        const wasWangchuan = (broken.id === 'yq_wangchuan');
+        if (target.weapon === broken.uid) target.weapon = null;
+        if (target.charging === broken.uid) target.charging = null;
+        delete target.ench[broken.uid];
+        removeUid(target, broken.uid);
         equipAuto(target);
-        addLog('💥 ' + entLabel(target) + ' 的【' + ITEMS[weapons[0].id].name + '】被击碎了！', 'kill');
+        addLog('💥 ' + entLabel(target) + ' 的【' + ITEMS[broken.id].name + '】被击碎了！', 'kill');
+        // ★ 忘川被击碎的离手判死（身上还有另一件则继续以负血存活）
+        if (wasWangchuan && target.alive && target.hp <= 0 && !hasArtifact(target, 'yq_wangchuan')){
+          addLog('失去【忘川】，' + target.name + ' 当场阵亡！', 'kill');
+          killEnt(target, m, false);
+          settleWin();
+          if (G.phase !== 'play') return;
+        }
       } else {
         // ★ 如果没装备（例如召唤物、空手玩家）
         if (target.isSummon) {
