@@ -403,6 +403,16 @@ input[type=number],input[type=text]{
 .monster-card .m-desc{font-size:12px;line-height:1.7;color:#a7b6d6}
 .monster-card .m-desc b{color:var(--cyan)}
 .monster-card .m-desc .danger{color:#ff5a5a;font-weight:600}
+/* ★ 联机：轮到别人时，把面板盖成「等待」状态（pointer-events:none，不影响拦截逻辑） */
+#choice,#sumCtl{position:relative}
+body.net-wait #choice.on::after,
+body.net-wait #sumCtl.on::after{
+  content:attr(data-netwait);
+  position:absolute;inset:0;display:grid;place-items:center;
+  background:rgba(8,12,24,.8);border-radius:12px;
+  font-size:12px;letter-spacing:.06em;color:#a9b6d6;
+  pointer-events:none;z-index:5;text-align:center;padding:0 12px;
+}
 </style>
 </head>
 <body>
@@ -413,6 +423,7 @@ input[type=number],input[type=text]{
     <span class="badge" id="modeBadge">单人探险</span>
     <span class="badge" id="monsterBtn" style="cursor:pointer;border-color:rgba(56,240,216,.4);color:var(--cyan)">📖 怪物图鉴</span>
     <span class="badge">1-4 人 · 地牢冒险</span>
+    <span class="badge" id="netBadge" style="display:none"></span>
     <div class="round">第 <b id="rRound">1</b> 层 · 剩余 <b id="rPlayers">0</b> 名冒险者</div>
   </header>
 
@@ -489,6 +500,16 @@ input[type=number],input[type=text]{
       <label style="padding-top:5px">玩家</label>
       <div style="flex:1;min-width:200px" id="pconf"></div>
     </div>
+    <div class="row" style="align-items:flex-start">
+      <label style="padding-top:5px">联机</label>
+      <div style="flex:1;min-width:200px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="sysbtn" id="hostBtn" style="flex:1;min-width:104px">作为房主开房</button>
+          <button class="sysbtn" id="joinBtn" style="flex:1;min-width:104px">加入房间…</button>
+        </div>
+        <div id="netStatus" style="font-size:11px;color:var(--dim);line-height:1.7;margin-top:7px">单机 / 热座模式（不联机也能直接玩）</div>
+      </div>
+    </div>
     <button class="big" id="goBtn">开始游戏</button>
     <div class="rules-fold">
       <span>规则较长，可在对局中随时查看。</span>
@@ -502,7 +523,6 @@ input[type=number],input[type=text]{
   <div class="sheet">
     <div class="sub">Game Over</div>
     <div class="winner" id="winTxt"></div>
-    <div id="winNote" style="display:none;font-size:11px;color:#7c8aa8;margin:-6px 0 10px"></div>
     <div id="winSub" style="color:#a7b6d6;font-size:13px;line-height:1.9;margin-bottom:16px"></div>
     <button class="big" id="againBtn">再来一局</button>
     <button class="big" id="resetBtn" style="background:linear-gradient(100deg,#8494b8,#a9b6d6);box-shadow:none;margin-top:8px">重新设置</button>
@@ -6799,8 +6819,6 @@ function gameOver(res){
   const lose = !!res.lose;
   $('winTxt').textContent = win ? '通关！' : (lose ? '全军覆没' : '冒险结束');
   $('winTxt').style.color = win ? '#4ade80' : '#ff3d9a';
-  $('winNote').style.display = lose ? '' : 'none';
-  $('winNote').textContent = lose ? '这也是没有办法的事。' : '';
   const rank = G.players.slice().sort((a,b)=> (b.alive?1:0)-(a.alive?1:0) || b.kills-a.kills || b.hp-a.hp);
   $('winSub').innerHTML = rank.map((p,idx)=>
     (idx+1) + '. ' + p.name +
@@ -8200,6 +8218,731 @@ function drawMinimap(){
   }
   ctx.restore();
 }
+
+/* ============================================================
+   局域网联机补丁 · Abyss Echo LAN Co-op
+   ------------------------------------------------------------
+   设计要点：
+     · 房主（host）跑全部游戏逻辑，是唯一权威状态机；
+     · 客户端（client）只做两件事：把收到的状态快照重新渲染、
+       把自己的操作意图发回房主；
+     · 同步粒度是「状态快照 + 面板镜像」——本作的 render() 天然从 G
+       全量重建 UI，所以每次 render 后节流广播一份 G 即可，无需逐条
+       事件同步，也不会漏状态；
+     · 操作权按座位隔离：房主被禁的按钮/面板，客户端才拿得到，反之
+       亦然，杜绝「替别人打」。
+   ============================================================ */
+(function () {
+  'use strict';
+  if (window.__abyssNetReady) return;
+  window.__abyssNetReady = true;
+
+  const MAX_SEATS = 4;
+
+  let netMode = 'off';          // 'off' | 'host' | 'client'
+  let ws = null;
+  let mySeat = 0;               // 客户端绑定的座位（0 起）
+  const seatOwner = {};         // 房主视角：seat -> 'remote'
+  let logLen = 0;
+  let dirty = false, syncTimer = 0, lastSyncAt = 0;
+  let clientReady = false;
+
+  /* ============================================================
+     小工具
+     ============================================================ */
+  function withRemote(fn) {
+    const old = window.__netRemoteExec;
+    window.__netRemoteExec = true;
+    try { return fn(); } finally { window.__netRemoteExec = old; }
+  }
+
+  let tipTimer = 0;
+  function tip(msg) {
+    let el = $('netTip');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'netTip';
+      el.style.cssText = 'position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:99;' +
+        'padding:9px 16px;border-radius:10px;font-size:12.5px;line-height:1.55;max-width:82vw;' +
+        'background:rgba(20,28,50,.97);border:1px solid rgba(56,240,216,.45);color:#c3d2f0;' +
+        'box-shadow:0 12px 40px -10px rgba(0,0,0,.9);opacity:0;transition:opacity .18s;' +
+        'pointer-events:none;text-align:center;';
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.style.opacity = '1';
+    clearTimeout(tipTimer);
+    tipTimer = setTimeout(function () { el.style.opacity = '0'; }, 2200);
+  }
+
+  function setStatus(html) {
+    const el = $('netStatus');
+    if (el && typeof html === 'string') el.innerHTML = html;
+    const b = $('netBadge');
+    if (!b) return;
+    if (netMode === 'off') { b.style.display = 'none'; return; }
+    b.style.display = '';
+    b.style.borderColor = 'rgba(56,240,216,.5)';
+    b.style.color = 'var(--cyan)';
+    if (netMode === 'host') {
+      const n = Object.keys(seatOwner).length + 1;
+      b.textContent = '🏠 房主 · ' + n + ' 人';
+    } else {
+      b.textContent = '👥 队友 · ' + (mySeat + 1) + ' 号位';
+    }
+  }
+
+  function defaultWsUrl() {
+    const h = (location.protocol === 'file:') ? 'localhost' : (location.hostname || 'localhost');
+    const p = (location.protocol !== 'file:' && location.port) ? location.port : '8080';
+    return 'ws://' + h + ':' + p;
+  }
+
+  /* ============================================================
+     状态序列化
+     - 剥掉运行时控制对象（含回调）与临时引用
+     - Infinity 用占位符保真（JSON 会把它变 null）
+     ============================================================ */
+  function snapshot() {
+    return JSON.stringify(G, function (k, v) {
+      if (k === 'sumCtl' || k === 'machineCtl' || k === 'actor') return undefined;
+      if (typeof v === 'function') return undefined;
+      if (v === Infinity) return '__INF__';
+      if (v === -Infinity) return '__NINF__';
+      if (typeof v === 'number' && !isFinite(v)) return null;
+      return v;
+    });
+  }
+  function restore(s) {
+    return JSON.parse(s, function (k, v) {
+      if (v === '__INF__') return Infinity;
+      if (v === '__NINF__') return -Infinity;
+      return v;
+    });
+  }
+
+  /* 运行时控制条（召唤物操控 / 炮台瞄准）：只传「指向谁」，客户端自己重建壳子 */
+  function ctlInfo() {
+    if (!G) return null;
+    if (G.sumCtl && G.sumCtl.s) {
+      return { k: 'summon', sid: (G.summons || []).indexOf(G.sumCtl.s),
+               seat: G.sumCtl.owner ? G.sumCtl.owner.i : -1, ap: G.sumCtl.actionsLeft };
+    }
+    if (G.machineCtl && G.machineCtl.m) {
+      return { k: 'aim', mid: (G.machines || []).indexOf(G.machineCtl.m),
+               seat: G.machineCtl.owner ? G.machineCtl.owner.i : -1, tnt: !!G.machineCtl.isTnt };
+    }
+    return null;
+  }
+  function applyCtl(c) {
+    if (!G) return;
+    G.sumCtl = null;
+    G.machineCtl = null;
+    if (!c) return;
+    if (c.k === 'summon' && G.summons && G.summons[c.sid]) {
+      G.sumCtl = { s: G.summons[c.sid], owner: G.players[c.seat], actionsLeft: c.ap,
+                   done: function () {} };
+    } else if (c.k === 'aim' && G.machines && G.machines[c.mid]) {
+      G.machineCtl = { m: G.machines[c.mid], owner: G.players[c.seat], isTnt: !!c.tnt,
+                       onFire: function () {}, onCancel: function () {}, hover: null };
+    }
+  }
+
+  /* ============================================================
+     UI 镜像（直接抓房主 DOM，覆盖所有面板，未来新增面板也自动生效）
+     ============================================================ */
+  function grabOpts(box) {
+    if (!box) return [];
+    return Array.prototype.map.call(box.children, function (b) {
+      return { h: b.innerHTML, d: !!b.disabled };
+    });
+  }
+  function uiState() {
+    const ui = { choice: null, panel: null, over: null };
+    const ch = $('choice');
+    if (ch && ch.classList.contains('on')) {
+      ui.choice = {
+        title: $('cTitle').innerHTML,
+        cancel: !!ch.querySelector(':scope > .cancel'),
+        opts: grabOpts($('cOpts')),
+      };
+    }
+    const bar = $('sumCtl');
+    if (bar && bar.classList.contains('on')) {
+      ui.panel = {
+        title: $('scTitle').innerHTML,
+        aim: bar.classList.contains('aim'),
+        opts: grabOpts($('scOpts')),
+      };
+    }
+    const ov = $('over');
+    if (ov && !ov.classList.contains('hide')) {
+      ui.over = { t: $('winTxt').textContent, s: $('winSub').innerHTML, c: $('winTxt').style.color };
+    }
+    return ui;
+  }
+
+  /* ============================================================
+     发送
+     ============================================================ */
+  function netSend(obj) {
+    if (!ws || ws.readyState !== 1) return;
+    try { ws.send(JSON.stringify(obj)); } catch (e) { /* 忽略 */ }
+  }
+  function netMarkDirty() {
+    if (netMode !== 'host' || !G) return;
+    dirty = true;
+    if (syncTimer) return;
+    const wait = Math.max(0, 55 - (Date.now() - lastSyncAt));
+    syncTimer = setTimeout(function () {
+      syncTimer = 0;
+      if (!dirty) return;
+      dirty = false;
+      lastSyncAt = Date.now();
+      broadcast();
+    }, wait);
+  }
+  function broadcast() {
+    if (netMode !== 'host' || !G) return;
+    updateWait();
+    let payload;
+    try {
+      payload = { t: 'state', g: snapshot(), ui: uiState(), ctl: ctlInfo() };
+    } catch (e) { return; }
+    netSend(payload);
+    setStatus();
+  }
+  function broadcastLobby() {
+    if (netMode !== 'host') return;
+    netSend({ t: 'lobby', seats: Object.keys(seatOwner).map(Number), started: !!G });
+  }
+
+  /* ============================================================
+     客户端：应用快照
+     ============================================================ */
+  function rebuildLog() {
+    const box = $('log');
+    if (!box) return;
+    const logs = (G && G.log) || [];
+    if (logs.length < logLen) { box.innerHTML = ''; logLen = 0; }
+    for (let i = logLen; i < logs.length; i++) {
+      const d = document.createElement('div');
+      if (logs[i].cls) d.className = logs[i].cls;
+      d.textContent = logs[i].text;
+      box.appendChild(d);
+    }
+    logLen = logs.length;
+    const par = box.parentElement;
+    if (par) par.scrollTop = par.scrollHeight;
+  }
+
+  function retagCards() {
+    if (netMode === 'off') return;
+    const cards = document.querySelectorAll('#plist .pcard');
+    for (let i = 0; i < cards.length; i++) {
+      const tag = cards[i].querySelector('.tag');
+      if (!tag) continue;
+      let label, cls;
+      if (netMode === 'host') {
+        if (i === 0) { label = 'YOU'; cls = 'you'; }
+        else if (seatIsRemote(i)) { label = '远程'; cls = 'ai'; }
+        else { label = '热座'; cls = 'you'; }
+      } else {
+        label = (i === mySeat) ? 'YOU' : '队友';
+        cls = (i === mySeat) ? 'you' : 'ai';
+      }
+      tag.textContent = label;
+      tag.className = 'tag ' + cls;
+    }
+  }
+
+  function renderUi(ui) {
+    ui = ui || {};
+    /* --- 选择面板 --- */
+    const ch = $('choice');
+    if (ui.choice) {
+      $('cTitle').innerHTML = ui.choice.title;
+      const box = $('cOpts');
+      box.innerHTML = '';
+      ui.choice.opts.forEach(function (o, idx) {
+        const b = document.createElement('button');
+        b.className = 'opt';
+        b.innerHTML = o.h;
+        b.disabled = !!o.d;
+        b.onclick = function () { netSend({ t: 'opt', box: 'c', idx: idx }); };
+        box.appendChild(b);
+      });
+      let c = ch.querySelector(':scope > .cancel');
+      if (ui.choice.cancel) {
+        if (!c) {
+          c = document.createElement('button');
+          c.className = 'cancel';
+          c.textContent = '取消';
+          ch.appendChild(c);
+        }
+        c.onclick = function () { netSend({ t: 'opt', box: 'c', idx: -1 }); };
+      } else if (c) {
+        c.remove();
+      }
+      ch.classList.add('on');
+      setChoosing(true);
+    } else if (ch) {
+      if (ch.classList.contains('on')) { ch.classList.remove('on'); setChoosing(false); }
+    }
+
+    /* --- 召唤物操控 / 炮台瞄准条 --- */
+    const bar = $('sumCtl');
+    if (ui.panel) {
+      $('scTitle').innerHTML = ui.panel.title;
+      const box = $('scOpts');
+      box.innerHTML = '';
+      ui.panel.opts.forEach(function (o, idx) {
+        const b = document.createElement('button');
+        b.className = 'opt';
+        b.innerHTML = o.h;
+        b.disabled = !!o.d;
+        b.onclick = function () { netSend({ t: 'opt', box: 'sc', idx: idx }); };
+        box.appendChild(b);
+      });
+      bar.classList.add('on');
+      if (ui.panel.aim) bar.classList.add('aim'); else bar.classList.remove('aim');
+    } else if (bar) {
+      bar.classList.remove('on');
+      bar.classList.remove('aim');
+    }
+
+    /* --- 结算面板 --- */
+    const ov = $('over');
+    if (ui.over) {
+      $('winTxt').textContent = ui.over.t;
+      $('winTxt').style.color = ui.over.c || '';
+      $('winSub').innerHTML = ui.over.s;
+      ov.classList.remove('hide');
+    } else if (ov && !ov.classList.contains('hide')) {
+      ov.classList.add('hide');
+    }
+  }
+
+  function applyState(msg) {
+    if (netMode !== 'client') return;
+    clientReady = true;
+    if (!msg.g) { $('setup').classList.add('hide'); return; }
+    G = restore(msg.g);
+    const st = $('setup');
+    if (st) st.classList.add('hide');
+    applyCtl(msg.ctl);
+    logLen = 0;
+    const lbox = $('log');
+    if (lbox) lbox.innerHTML = '';
+    render();          /* 内部会 retagCards */
+    rebuildLog();
+    renderUi(msg.ui);
+    updateWait();
+    setStatus();
+  }
+
+  /* ============================================================
+     房主：执行远端意图
+     ============================================================ */
+  function seatOfActor() {
+    if (!G || !G.actors) return -1;
+    const a = G.actors[G.turn];
+    if (!a || a.kind !== 'player') return -1;
+    return a.id;
+  }
+  function seatIsRemote(i) {
+    return netMode === 'host' && seatOwner[i] === 'remote';
+  }
+
+  function hostRunAct(a) {
+    const btn = document.querySelector('.abtn[data-a="' + a + '"]');
+    if (!btn) return;
+    const wasDis = btn.disabled;
+    btn.disabled = false;
+    withRemote(function () { btn.click(); });
+    if (btn.isConnected) btn.disabled = wasDis;
+  }
+
+  function hostRunChip(uid) {
+    const el = document.querySelector('#plist .chip[data-uid="' + uid + '"]');
+    if (el) withRemote(function () { el.click(); });
+  }
+
+  function hostClickOpt(box, idx) {
+    if (box === 'c') {
+      const ch = $('choice');
+      if (!ch || !ch.classList.contains('on')) return;
+      if (idx < 0) {
+        const c = ch.querySelector(':scope > .cancel');
+        if (c) withRemote(function () { c.click(); });
+        return;
+      }
+      const b = $('cOpts').children[idx];
+      if (b && !b.disabled) withRemote(function () { b.click(); });
+      return;
+    }
+    const bar = $('sumCtl');
+    if (!bar || !bar.classList.contains('on')) return;
+    if (idx < 0) {
+      const list = Array.prototype.slice.call($('scOpts').children);
+      const b = list.filter(function (x) { return x.textContent.indexOf('取消') >= 0; })[0];
+      if (b && !b.disabled) withRemote(function () { b.click(); });
+      return;
+    }
+    const b = $('scOpts').children[idx];
+    if (b && !b.disabled) withRemote(function () { b.click(); });
+  }
+
+  /* 客户端点地图 → 房主在自己的 canvas 上派发一次等价点击 */
+  function hostRunTile(tx, ty) {
+    if (!G || !G.dungeon) return;
+    const room = G.dungeon.rooms[G.dungeon.currentRoom];
+    if (!room) return;
+    const F = roomFrame(room);
+    const mx = F.ox + tx * F.tile + F.tile / 2;
+    const my = F.oy + ty * F.tile + F.tile / 2;
+    const rect = cv.getBoundingClientRect();
+    if (!rect || rect.width < 20 || rect.height < 20) {
+      tip('房主的游戏窗口处于不可见状态，地图点击暂时无法转达。');
+      return;
+    }
+    const sc = Math.min(rect.width / MW, rect.height / MH) || (rect.width / MW);
+    const dw = MW * sc, dh = MH * sc;
+    const left = rect.left + (rect.width - dw) / 2;
+    const top = rect.top + (rect.height - dh) / 2;
+    const ev = new MouseEvent('click', {
+      clientX: left + mx * sc, clientY: top + my * sc,
+      bubbles: true, cancelable: true, view: window,
+    });
+    withRemote(function () { cv.dispatchEvent(ev); });
+  }
+
+  /* ============================================================
+     消息分发
+     ============================================================ */
+  function onHostMsg(m) {
+    if (netMode !== 'host' || !G) return;
+    const seat = m.seat;
+    if (typeof seat !== 'number') return;
+    if (seatOfActor() !== seat) return;      /* 不是他的回合 → 丢弃，防抢操作 */
+    if (m.t === 'act') hostRunAct(m.a);
+    else if (m.t === 'cv') hostRunTile(m.x, m.y);
+    else if (m.t === 'opt') hostClickOpt(m.box, m.idx);
+    else if (m.t === 'chip') hostRunChip(m.uid);
+  }
+
+  function onClientMsg(m) {
+    if (netMode !== 'client') return;
+    if (m.t === 'state') applyState(m);
+    else if (m.t === 'lobby') {
+      $('setup').classList.remove('hide');
+      setStatus('已连接房主 · 等待其点「开始游戏」…');
+    } else if (m.t === 'host_gone') {
+      netMode = 'off';
+      ws = null;
+      setStatus('房主已断开连接。刷新页面可重新加入。');
+      tip('房主已断开连接。');
+    } else if (m.t === 'busy') {
+      tip(m.msg || '房主正在对局中，暂时无法加入。');
+    }
+  }
+
+  /* ============================================================
+     连接
+     ============================================================ */
+  function closeWs() {
+    if (ws) {
+      try { ws.onclose = null; ws.close(); } catch (e) {}
+      ws = null;
+    }
+  }
+
+  function connect(url, role) {
+    closeWs();
+    let sock;
+    try { sock = new WebSocket(url); }
+    catch (e) { setStatus('地址无效：' + url); tip('地址无效，格式应为 ws://192.168.1.10:8080'); return; }
+    ws = sock;
+    setStatus('正在连接 ' + url + ' …');
+
+    sock.onopen = function () {
+      netSend({ t: 'hello', role: role });
+    };
+    sock.onmessage = function (ev) {
+      let m;
+      try { m = JSON.parse(ev.data); } catch (e) { return; }
+      if (!m) return;
+      if (m.t === 'host_ok') {
+        netMode = 'host';
+        (m.seats || []).forEach(function (s) { seatOwner[s] = 'remote'; });
+        if (m.seats && m.seats.length) ensureSeats(Math.max.apply(null, m.seats) + 1);
+        setStatus('房主 · 房间已开启。让队友打开 <b style="color:var(--cyan)">http://' +
+                  ((location.protocol === 'file:') ? '本机IP' : location.hostname) + ':' +
+                  ((location.port) || '8080') + '/</b> 加入。');
+        broadcastLobby();
+        if (G) netMarkDirty();
+        return;
+      }
+      if (m.t === 'joined') {
+        netMode = 'client';
+        mySeat = m.seat;
+        setStatus('已加入 · 你是 <b style="color:var(--cyan)">玩家 ' + (mySeat + 1) + '</b>，等待房主开始…');
+        return;
+      }
+      if (m.t === 'peer_join') {
+        seatOwner[m.seat] = 'remote';
+        ensureSeats(m.seat + 1);
+        setStatus();
+        broadcastLobby();
+        if (G && m.seat < G.players.length) netMarkDirty();
+        else if (G) netSend({ t: 'busy', msg: '对局已开始，本局座位已固定，请等房主重开一局再参加。' });
+        else netSend({ t: 'lobby' });
+        return;
+      }
+      if (m.t === 'peer_leave') {
+        delete seatOwner[m.seat];
+        setStatus();
+        broadcastLobby();
+        return;
+      }
+      if (m.t === 'err') {
+        netMode = 'off';
+        setStatus('连接被拒绝：' + (m.msg || '未知原因'));
+        tip(m.msg || '连接被拒绝');
+        closeWs();
+        return;
+      }
+      /* 以下是游戏消息 */
+      if (netMode === 'client') onClientMsg(m);
+      else if (netMode === 'host') onHostMsg(m);
+    };
+    sock.onclose = function () {
+      if (netMode === 'client') {
+        setStatus('与房主的连接已断开。刷新页面可重新加入。');
+      } else if (netMode === 'host') {
+        setStatus('与中转服务器的连接已断开（队友会失去同步）。刷新页面可重新连接。');
+      }
+    };
+    sock.onerror = function () {
+      if (netMode === 'off') setStatus('连接失败。确认房主已运行 <b>node server.js</b>，且地址端口正确。');
+    };
+  }
+
+  function ensureSeats(n) {
+    if (n > MAX_SEATS) n = MAX_SEATS;
+    if (typeof cfgN === 'number' && cfgN < n) { cfgN = n; buildSeg(); }
+    buildPconf();
+  }
+
+  /* ============================================================
+     覆写：buildPconf（标注座位归属）
+     ============================================================ */
+  const _buildPconf = buildPconf;
+  buildPconf = function () {
+    _buildPconf();
+    const rows = pconf.children;
+    for (let i = 0; i < rows.length; i++) {
+      const btn = rows[i].querySelector('button');
+      if (!btn) continue;
+      if (i === 0) {
+        btn.textContent = '你（本机）';
+      } else if (seatOwner[i] === 'remote') {
+        btn.textContent = '远程玩家';
+        btn.className = 'mode bot';
+      } else {
+        btn.textContent = '本机热座';
+        btn.className = 'mode human';
+      }
+    }
+  };
+
+  /* ============================================================
+     覆写：isHumanTurn（按座位隔离操作权）
+     ============================================================ */
+  const _isHumanTurn = isHumanTurn;
+  isHumanTurn = function () {
+    if (netMode === 'client') {
+      if (!G || G.phase !== 'play' || G.animating) return false;
+      if (G.sub === 'summon' || G.sub === 'summonExtra') return false;
+      if (seatOfActor() !== mySeat) return false;
+      const p = cur();
+      return !!(p && p.alive && !p.isAI);
+    }
+    if (netMode === 'host') {
+      if (window.__netRemoteExec) return true;
+      if (!_isHumanTurn()) return false;
+      const i = seatOfActor();
+      if (i >= 0 && seatIsRemote(i)) return false;
+      return true;
+    }
+    return _isHumanTurn();
+  };
+
+  /* ============================================================
+     覆写：render（末尾触发同步 / 客户端修正标签）
+     ============================================================ */
+  const _render = render;
+  render = function () {
+    _render.apply(this, arguments);
+    if (netMode === 'host') { retagCards(); updateWait(); netMarkDirty(); }
+    else if (netMode === 'client') { retagCards(); updateWait(); }
+  };
+
+  /* ============================================================
+     面板同步钩子
+     - showChoice / hideChoice / 操控条 都不经过 render()，需要单独捕获
+     - addLog 覆盖面最广（几乎所有状态变化都会落一条日志）
+     - MutationObserver 兜住面板 DOM 的任何变化
+     ============================================================ */
+  const _addLog = addLog;
+  addLog = function () {
+    _addLog.apply(this, arguments);
+    if (netMode === 'host') netMarkDirty();
+  };
+
+  (function watchPanels() {
+    if (typeof MutationObserver !== 'function') return;
+    const obs = new MutationObserver(function () {
+      if (netMode === 'host') netMarkDirty();
+    });
+    ['choice', 'cOpts', 'cTitle', 'sumCtl', 'scOpts', 'scTitle', 'over'].forEach(function (id) {
+      const el = $(id);
+      if (el) obs.observe(el, { attributes: true, childList: true, subtree: true, characterData: true });
+    });
+  })();
+
+  /* 轮到别人时把面板盖成等待态（纯视觉，不改变拦截逻辑） */
+  function updateWait() {
+    const bd = document.body;
+    if (!bd) return;
+    let want = false, txt = '';
+    if (G && netMode !== 'off' && G.phase === 'play') {
+      const i = seatOfActor();
+      if (i >= 0) {
+        const mine = (netMode === 'client') ? (i === mySeat) : (i === 0 || !seatIsRemote(i));
+        if (!mine) { want = true; txt = '等待 玩家 ' + (i + 1) + ' 操作…'; }
+      }
+    }
+    /* ⚠ setAttribute 即使写入相同值也会触发 MutationObserver，
+       这里必须做 diff，否则会陷入「广播 → 改 DOM → 触发观察 → 再广播」死循环 */
+    if (!want) {
+      if (bd.classList.contains('net-wait')) bd.classList.remove('net-wait');
+      return;
+    }
+    if (!bd.classList.contains('net-wait')) bd.classList.add('net-wait');
+    [$('choice'), $('sumCtl')].forEach(function (el) {
+      if (el && el.getAttribute('data-netwait') !== txt) el.setAttribute('data-netwait', txt);
+    });
+  }
+
+  /* ============================================================
+     覆写：newGame（开局立刻推一份完整状态）
+     ============================================================ */
+  const _newGame = newGame;
+  newGame = function (cfg) {
+    _newGame(cfg);
+    if (netMode === 'host') {
+      if (Object.keys(seatOwner).length) {
+        cfgN = cfg.n;
+        buildSeg(); buildPconf();
+      }
+      netMarkDirty();
+      setTimeout(netMarkDirty, 120);
+    }
+  };
+
+  /* ============================================================
+     点击统一拦截（捕获阶段，先于所有既有监听）
+     ============================================================ */
+  document.addEventListener('click', function (e) {
+    if (netMode === 'off') return;
+    const t = e.target;
+    if (!t || !t.closest) return;
+
+    /* 自己派发的模拟点击：直接放行 */
+    if (window.__netRemoteExec) return;
+
+    /* ---------------- 房主：拦住「替远程玩家操作」 ---------------- */
+    if (netMode === 'host') {
+      const i = seatOfActor();
+      if (i < 0 || !seatIsRemote(i)) return;
+      if (t.closest('#cv') || t.closest('.abtn') || t.closest('.chip') ||
+          t.closest('#cOpts') || t.closest('#scOpts') || t.closest('#choice')) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        tip('现在是远程玩家 ' + (i + 1) + ' 的回合，请等对方操作。');
+      }
+      return;
+    }
+
+    /* ---------------- 客户端：转发操作给房主 ---------------- */
+    const ab = t.closest('.abtn');
+    if (ab) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (!ab.disabled) netSend({ t: 'act', a: ab.dataset.a });
+      else tip('现在不是你的回合。');
+      return;
+    }
+    /* 镜像面板的按钮自带 onclick，放行 */
+    if (t.closest('#choice') || t.closest('#sumCtl')) return;
+
+    const chip = t.closest('.chip');
+    if (chip) {
+      if (chip.classList.contains('usable')) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        netSend({ t: 'chip', uid: chip.dataset.uid });
+      }
+      return;
+    }
+    if (t.closest('#goBtn, #againBtn, #resetBtn, #backBtn, #forceEndBtn')) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      tip('联机对局中，这个操作只能由房主执行。');
+      return;
+    }
+    if (t.closest('#cv')) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const tile = tileAtEvent(e);
+      if (tile) netSend({ t: 'cv', x: tile.tx, y: tile.ty });
+      return;
+    }
+  }, true);
+
+  /* ============================================================
+     入口按钮
+     ============================================================ */
+  const hostBtn = $('hostBtn'), joinBtn = $('joinBtn');
+  if (hostBtn) hostBtn.onclick = function () {
+    if (netMode === 'host') { tip('已经是房主了。'); return; }
+    if (netMode === 'client') { tip('你已经在房间里了。'); return; }
+    const def = defaultWsUrl();
+    const url = prompt(
+      '中转服务器地址\n（房主在本机跑 node server.js，直接回车即可）', def);
+    if (!url) return;
+    connect(url.trim(), 'host');
+  };
+  if (joinBtn) joinBtn.onclick = function () {
+    if (netMode !== 'off') { tip('已经连接中。'); return; }
+    const def = defaultWsUrl();
+    const url = prompt('请输入房主的联机地址\n（形如 ws://192.168.1.10:8080）', def);
+    if (!url) return;
+    connect(url.trim(), 'client');
+  };
+
+  setStatus('单机 / 热座模式（不联机也能直接玩）');
+
+  /* 调试出口 */
+  window.__abyssNet = {
+    mode: function () { return netMode; },
+    seat: function () { return mySeat; },
+    send: netSend,
+    broadcast: broadcast,
+  };
+})();
+
 </script>
 </body>
 </html>
